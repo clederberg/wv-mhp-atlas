@@ -81,7 +81,7 @@ def get(url, params):
             time.sleep(wait)
 
 
-def page_query(url, where, out_fields="*", geometry=None, out_sr=4326):
+def page_query(url, where, out_fields="*", want_geometry=False, out_sr=4326):
     """Query an ArcGIS layer, paging until all records are returned."""
     rows = []
     offset = 0
@@ -89,14 +89,12 @@ def page_query(url, where, out_fields="*", geometry=None, out_sr=4326):
         params = {
             "where": where,
             "outFields": out_fields,
-            "returnGeometry": "true" if geometry is None else "false",
+            "returnGeometry": "true" if want_geometry else "false",
             "outSR": out_sr,
             "resultOffset": offset,
             "resultRecordCount": PAGE,
             "f": "json",
         }
-        if geometry is None and out_fields != "*":
-            params["returnGeometry"] = "false"
         data = get(url, params)
         feats = data.get("features", [])
         rows.extend(feats)
@@ -178,7 +176,7 @@ def build(county, out_geojson, out_csv, do_lots=True):
     by_id = {}
     for f in summary:
         a = f["attributes"]
-        pid = a.get("CleanParcelID")
+        pid = (a.get("CleanParcelID") or "").strip()
         if pid:
             by_id[pid] = a
 
@@ -192,9 +190,10 @@ def build(county, out_geojson, out_csv, do_lots=True):
             PARCELS,
             where=f"CleanParcelID IN ({inlist})",
             out_fields="CleanParcelID",
+            want_geometry=True,          # the fix: we need the shapes here
         )
         for g in geo:
-            pid = g["attributes"].get("CleanParcelID")
+            pid = (g["attributes"].get("CleanParcelID") or "").strip()
             attrs = by_id.get(pid)
             geom = g.get("geometry")
             if not attrs or not geom or "rings" not in geom:
@@ -213,6 +212,9 @@ def build(county, out_geojson, out_csv, do_lots=True):
             })
             if do_lots:
                 print(f"  {attrs.get('FullOwnerName','?')[:32]:32}  lots~{lots}")
+
+    if not features:
+        print("  parks matched but no geometry came back. Send Claude the run log.")
 
     fc = {"type": "FeatureCollection", "features": features,
           "meta": {"county": county.upper(), "built": time.strftime("%Y-%m-%d"),
