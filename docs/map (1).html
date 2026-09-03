@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SCH Properties · MHP Atlas</title>
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="masthead">
+    <div class="brand">
+      <img class="logo" src="sch-logo.png" alt="SCH Properties LLC">
+      <div class="brandtext">
+        <h1>Mobile Home Park Atlas</h1>
+        <div class="sub" id="sub">Monongalia County</div>
+      </div>
+    </div>
+    <nav class="tabs">
+      <a href="index.html">Table</a>
+      <a href="map.html" class="active">Map</a>
+    </nav>
+  </header>
+
+  <div id="banner"></div>
+  <div id="map"></div>
+  <p class="note">Amber outline marks a parcel with a pending ownership transfer in the assessment record.</p>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="app.js"></script>
+<script>
+const map = L.map("map");
+L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}", {
+  attribution: "Tiles &copy; Esri", maxZoom: 19, maxNativeZoom: 16
+}).addTo(map);
+
+const BASE = "#1e4a24", FLAG = "#9c2f45";
+
+function popup(p) {
+  return `
+    <b>${p.FullOwnerName || "Unknown owner"}</b><br>
+    ${p.FullPhysicalAddress || ""}<br>
+    <b>Lots (E-911):</b> ${p.lot_count ?? "?"}<br>
+    <b>Assessed:</b> ${money(p.TotalAppraisal)} &nbsp; <b>Est. market:</b> ${money(p.est_market_value)}<br>
+    <b>Parcel:</b> ${p.ParcelID || ""}<br>
+    ${p.recent_transfer ? `<span style="color:${FLAG}"><b>Transfer pending to ${p.NewOwner || "?"}</b></span>` : ""}`;
+}
+
+loadParks().then(fc => {
+  if (fc.meta) document.getElementById("sub").textContent =
+    `${fc.meta.county || ""} County  \u00b7  built ${fc.meta.built || ""}`;
+  if (isSample(fc)) document.getElementById("banner").innerHTML =
+    `<div class="sample-banner">Sample data. Run <code>python fetch.py</code> to replace this with live Monongalia parcels.</div>`;
+
+  const layer = L.geoJSON(fc, {
+    style: f => {
+      const flagged = f.properties.recent_transfer;
+      return { color: flagged ? FLAG : BASE, weight: flagged ? 2.5 : 1.5,
+               fillColor: flagged ? FLAG : BASE, fillOpacity: 0.18 };
+    },
+    onEachFeature: (f, l) => l.bindPopup(popup(f.properties)),
+    pointToLayer: (f, latlng) => L.circleMarker(latlng, { radius: 7 })
+  }).addTo(map);
+
+  try { map.fitBounds(layer.getBounds(), { padding: [30, 30] }); }
+  catch (e) { map.setView([39.63, -79.95], 11); } // Morgantown fallback
+
+  const legend = L.control({ position: "bottomright" });
+  legend.onAdd = () => {
+    const d = L.DomUtil.create("div", "legend");
+    d.innerHTML =
+      `<span class="sw" style="background:${BASE}"></span>Mobile home park<br>` +
+      `<span class="sw" style="background:${FLAG}"></span>Transfer pending`;
+    return d;
+  };
+  legend.addTo(map);
+}).catch(e => {
+  document.getElementById("map").innerHTML =
+    `<p style="padding:16px">Could not load parks.geojson. ${e.message}</p>`;
+  map.setView([39.63, -79.95], 11);
+});
+</script>
+</body>
+</html>
