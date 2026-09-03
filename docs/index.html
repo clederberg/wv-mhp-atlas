@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WV MHP Atlas: Parks</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="masthead">
+    <div>
+      <h1>WV Mobile Home Park Atlas</h1>
+      <div class="sub" id="sub">Monongalia County</div>
+    </div>
+    <nav class="tabs">
+      <a href="index.html" class="active">Table</a>
+      <a href="map.html">Map</a>
+    </nav>
+  </header>
+
+  <div id="banner"></div>
+
+  <div class="controls">
+    <input type="search" id="q" placeholder="Filter by owner, address, or parcel id">
+    <span class="count" id="count"></span>
+  </div>
+
+  <div class="tablewrap">
+    <table id="tbl">
+      <thead>
+        <tr>
+          <th data-k="FullOwnerName">Owner <span class="arrow"></span></th>
+          <th data-k="FullPhysicalAddress">Park address <span class="arrow"></span></th>
+          <th class="num" data-k="lot_count">Lots <span class="arrow"></span></th>
+          <th class="num" data-k="TotalAppraisal">Assessed <span class="arrow"></span></th>
+          <th class="num" data-k="est_market_value">Est. market <span class="arrow"></span></th>
+          <th data-k="PropertyClassDescription">Class <span class="arrow"></span></th>
+          <th data-k="deed">Deed <span class="arrow"></span></th>
+          <th data-k="recent_transfer">Status <span class="arrow"></span></th>
+          <th data-k="ParcelID">Parcel <span class="arrow"></span></th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+
+  <p class="note" id="note"></p>
+</div>
+
+<script src="app.js"></script>
+<script>
+let PARKS = [];
+let sortK = "lot_count", sortDir = -1;
+
+function rowVal(p, k) {
+  if (k === "deed") return deed(p);
+  return p[k];
+}
+
+function render() {
+  const q = document.getElementById("q").value.trim().toLowerCase();
+  let rows = PARKS.filter(p => {
+    if (!q) return true;
+    return [p.FullOwnerName, p.FullPhysicalAddress, p.ParcelID, p.FullOwnerAddress]
+      .some(v => (v || "").toLowerCase().includes(q));
+  });
+  rows.sort((a, b) => {
+    let x = rowVal(a, sortK), y = rowVal(b, sortK);
+    if (typeof x === "string" || typeof y === "string") {
+      x = (x || "").toString().toLowerCase(); y = (y || "").toString().toLowerCase();
+      return x < y ? -sortDir : x > y ? sortDir : 0;
+    }
+    return ((x || 0) - (y || 0)) * sortDir;
+  });
+
+  const tb = document.getElementById("rows");
+  tb.innerHTML = "";
+  for (const p of rows) {
+    const tr = document.createElement("tr");
+    const status = p.recent_transfer
+      ? `<span class="flag">transfer pending</span>`
+      : "";
+    tr.innerHTML = `
+      <td class="owner">${p.FullOwnerName || ""}</td>
+      <td>${p.FullPhysicalAddress || ""}<div class="addr">${p.FullOwnerAddress || ""}</div></td>
+      <td class="num">${num(p.lot_count)}</td>
+      <td class="num">${money(p.TotalAppraisal)}</td>
+      <td class="num">${money(p.est_market_value)}</td>
+      <td>${p.PropertyClassDescription || p.PropertyClassCode || ""}</td>
+      <td class="num">${deed(p)}</td>
+      <td>${status}${p.recent_transfer ? "<div class='addr'>to " + (p.NewOwner || "") + "</div>" : ""}</td>
+      <td>${p.ParcelID || ""}</td>`;
+    tb.appendChild(tr);
+  }
+  document.getElementById("count").textContent =
+    `${rows.length} park${rows.length === 1 ? "" : "s"}`;
+  markArrows();
+}
+
+function markArrows() {
+  document.querySelectorAll("thead th").forEach(th => {
+    const a = th.querySelector(".arrow");
+    a.textContent = th.dataset.k === sortK ? (sortDir === 1 ? "\u25b2" : "\u25bc") : "";
+  });
+}
+
+document.querySelectorAll("thead th").forEach(th => {
+  th.addEventListener("click", () => {
+    const k = th.dataset.k;
+    if (k === sortK) sortDir *= -1;
+    else { sortK = k; sortDir = (k === "FullOwnerName" || k === "FullPhysicalAddress") ? 1 : -1; }
+    render();
+  });
+});
+document.getElementById("q").addEventListener("input", render);
+
+loadParks().then(fc => {
+  PARKS = fc.features.map(f => f.properties);
+  if (fc.meta) document.getElementById("sub").textContent =
+    `${fc.meta.county || ""} County  \u00b7  built ${fc.meta.built || ""}`;
+  if (isSample(fc)) document.getElementById("banner").innerHTML =
+    `<div class="sample-banner">Sample data. Run <code>python fetch.py</code> to replace this with live Monongalia parcels.</div>`;
+  document.getElementById("note").textContent =
+    "Est. market = assessed / 0.6 (WV assesses at 60% of appraised value). Lots = E-911 address points inside the parcel. Sale price is not in this dataset and requires a county clerk deed lookup.";
+  render();
+}).catch(e => {
+  document.getElementById("rows").innerHTML =
+    `<tr><td colspan="9">Could not load parks.geojson. ${e.message}</td></tr>`;
+});
+</script>
+</body>
+</html>

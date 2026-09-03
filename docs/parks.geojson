@@ -1,0 +1,61 @@
+{
+  "type": "FeatureCollection",
+  "meta": { "county": "MONONGALIA", "built": "sample", "sample": true,
+            "source": "placeholder data, not real parcels" },
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "FullOwnerName": "SAMPLE HOLDINGS LLC",
+        "FullOwnerAddress": "PO BOX 000, MORGANTOWN WV 26501",
+        "FullPhysicalAddress": "100 EXAMPLE LN, MORGANTOWN WV 26505",
+        "ParcelID": "00-00-0000-0000-0000",
+        "PropertyClassDescription": "Class III",
+        "PropertyClassCode": "3",
+        "LandUse": "MOBILE HOME PARK",
+        "TotalAppraisal": 420000, "est_market_value": 700000,
+        "DeedBook": "1450", "DeedPage": "221",
+        "lot_count": 38, "recent_transfer": false, "NewOwner": ""
+      },
+      "geometry": { "type": "Polygon", "coordinates": [[
+        [-79.958, 39.641], [-79.954, 39.641], [-79.954, 39.638], [-79.958, 39.638], [-79.958, 39.641]
+      ]] }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "FullOwnerName": "PLACEHOLDER TRAILER CT INC",
+        "FullOwnerAddress": "12 SAMPLE RD, WESTOVER WV 26501",
+        "FullPhysicalAddress": "77 DEMO ST, WESTOVER WV 26501",
+        "ParcelID": "00-00-0000-0000-0001",
+        "PropertyClassDescription": "Class IV",
+        "PropertyClassCode": "4",
+        "LandUse": "TRAILER PARK",
+        "TotalAppraisal": 255000, "est_market_value": 425000,
+        "DeedBook": "1502", "DeedPage": "88",
+        "lot_count": 22, "recent_transfer": true, "NewOwner": "NEW SAMPLE OWNER LLC"
+      },
+      "geometry": { "type": "Polygon", "coordinates": [[
+        [-79.985, 39.632], [-79.981, 39.632], [-79.981, 39.629], [-79.985, 39.629], [-79.985, 39.632]
+      ]] }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "FullOwnerName": "EXAMPLE MHP PARTNERS LP",
+        "FullOwnerAddress": "500 SAMPLE AVE, STAR CITY WV 26505",
+        "FullPhysicalAddress": "210 TEST DR, STAR CITY WV 26505",
+        "ParcelID": "00-00-0000-0000-0002",
+        "PropertyClassDescription": "Class III",
+        "PropertyClassCode": "3",
+        "LandUse": "MOBILE HOME PARK",
+        "TotalAppraisal": 610000, "est_market_value": 1016667,
+        "DeedBook": "1399", "DeedPage": "540",
+        "lot_count": 54, "recent_transfer": false, "NewOwner": ""
+      },
+      "geometry": { "type": "Polygon", "coordinates": [[
+        [-79.972, 39.655], [-79.967, 39.655], [-79.967, 39.651], [-79.972, 39.651], [-79.972, 39.655]
+      ]] }
+    }
+  ]
+}
