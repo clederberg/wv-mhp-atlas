@@ -397,6 +397,20 @@ def enrich_name(props, rings):
     props["name_source"] = src
 
 
+def encrypt_json(text, password):
+    """AES-GCM encrypt a string with a PBKDF2 key. Returns a JSON-safe dict."""
+    import base64
+    import hashlib
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    salt = os.urandom(16)
+    iv = os.urandom(12)
+    iters = 200000
+    key = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, iters, 32)
+    ct = AESGCM(key).encrypt(iv, text.encode(), None)
+    b = lambda x: base64.b64encode(x).decode()
+    return {"v": 1, "iter": iters, "salt": b(salt), "iv": b(iv), "ct": b(ct)}
+
+
 def build(county, out_geojson, out_csv, do_lots=True, do_names=True, min_lots=0):
     where = park_where(county)
     print(f"Querying parks in {county.upper()} ...")
@@ -474,6 +488,23 @@ def build(county, out_geojson, out_csv, do_lots=True, do_names=True, min_lots=0)
     fc = {"type": "FeatureCollection", "features": features,
           "meta": {"county": county.upper(), "built": time.strftime("%Y-%m-%d"),
                    "source": "WV GIS Technical Center WV_Parcels service"}}
+
+    # If a site password is set, publish only an encrypted file and remove any
+    # plain data so nothing sensitive is readable in the public repo.
+    pw = os.environ.get("SITE_PASSWORD", "").strip()
+    if pw:
+        enc = encrypt_json(json.dumps(fc), pw)
+        enc_path = os.path.join(os.path.dirname(out_geojson) or ".", "parks.enc.json")
+        with open(enc_path, "w") as fh:
+            json.dump(enc, fh)
+        for pth in (out_geojson, out_csv):
+            try:
+                os.remove(pth)
+            except OSError:
+                pass
+        print(f"\nwrote {enc_path}  (encrypted, {len(features)} parks); plain files removed")
+        return
+
     with open(out_geojson, "w") as fh:
         json.dump(fc, fh)
     print(f"\nwrote {out_geojson}  ({len(features)} parks)")
