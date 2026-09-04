@@ -174,6 +174,9 @@ def count_addresses(rings):
 OVERPASS = "https://overpass-api.de/api/interpreter"
 UA = "wv-mhp-atlas/1.0 (SCH Properties internal tool)"
 
+# If OpenStreetMap starts failing, stop hammering it and finish on street names.
+_OSM = {"fails": 0, "off": False}
+
 # If the street ends in one of these, it is a public road, not a park name.
 ROAD_SUFFIX = {
     "RD", "ROAD", "ST", "STREET", "AVE", "AVENUE", "DR", "DRIVE", "LN", "LANE",
@@ -257,8 +260,10 @@ def _centroid_lonlat(rings):
 
 def name_from_osm(lat, lon):
     """Nearest named mobile-home-ish feature in OpenStreetMap, or ''."""
+    if _OSM["off"]:
+        return ""
     ql = (
-        "[out:json][timeout:25];("
+        "[out:json][timeout:8];("
         f'nwr(around:220,{lat},{lon})["name"]["landuse"="residential"];'
         f'nwr(around:220,{lat},{lon})["name"]["tourism"="caravan_site"];'
         f'nwr(around:220,{lat},{lon})["name"]["place"="neighbourhood"];'
@@ -267,9 +272,14 @@ def name_from_osm(lat, lon):
     try:
         body = urlencode({"data": ql}).encode()
         req = Request(OVERPASS, data=body, headers={"User-Agent": UA})
-        with urlopen(req, timeout=60) as r:
+        with urlopen(req, timeout=10) as r:
             data = json.loads(r.read().decode("utf-8"))
+        _OSM["fails"] = 0
     except Exception:
+        _OSM["fails"] += 1
+        if _OSM["fails"] >= 3:
+            _OSM["off"] = True
+            print("  OpenStreetMap slow/unreachable; finishing on street names only")
         return ""
     best, best_d = "", 1e9
     for el in data.get("elements", []):
@@ -304,7 +314,8 @@ def enrich_name(props, rings):
             lon, lat = c
             name = name_from_osm(lat, lon)
             src = "osm" if name else ""
-            time.sleep(1)   # be a good OpenStreetMap citizen
+            if not _OSM["off"]:
+                time.sleep(0.4)   # be a good OpenStreetMap citizen
     props["park_name"] = name
     props["name_source"] = src
 
