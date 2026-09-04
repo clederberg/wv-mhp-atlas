@@ -20,6 +20,7 @@ GitHub Pages site picks the data up directly.
 import argparse
 import csv
 import json
+import math
 import os
 import re
 import sys
@@ -274,20 +275,43 @@ PLACES_URL = "https://places.googleapis.com/v1/places:searchText"
 _GOOG = {"calls": 0}
 
 
-def name_from_google(lat, lon):
-    """Nearest Google-listed mobile home park to the point, or ''."""
+def _dist_m(lat1, lon1, lat2, lon2):
+    """Great-circle distance in meters."""
+    r = 6371000.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dp = math.radians(lat2 - lat1)
+    dl = math.radians(lon2 - lon1)
+    a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return 2 * r * math.asin(math.sqrt(a))
+
+
+def _parcel_radius_m(rings, clat, clon):
+    """Distance from the parcel centroid to its farthest vertex, in meters."""
+    pts = rings[0] if rings else []
+    if not pts:
+        return 0.0
+    return max(_dist_m(clat, clon, p[1], p[0]) for p in pts)
+
+
+def name_from_google(lat, lon, accept_m):
+    """Google-listed mobile home park on this parcel, or ''.
+
+    Google returns the nearest listed park; we accept it only if its pin falls
+    within the parcel (plus a small buffer), so a park across town can't win.
+    """
     if not GOOGLE_KEY:
         return ""
+    search_radius = max(accept_m + 150.0, 200.0)
     payload = json.dumps({
         "textQuery": "mobile home park",
         "locationBias": {"circle": {
-            "center": {"latitude": lat, "longitude": lon}, "radius": 350.0}},
+            "center": {"latitude": lat, "longitude": lon}, "radius": search_radius}},
         "maxResultCount": 1,
     }).encode()
     req = Request(PLACES_URL, data=payload, headers={
         "Content-Type": "application/json",
         "X-Goog-Api-Key": GOOGLE_KEY,
-        "X-Goog-FieldMask": "places.displayName",
+        "X-Goog-FieldMask": "places.displayName,places.location",
     })
     try:
         with urlopen(req, timeout=15) as r:
@@ -299,6 +323,11 @@ def name_from_google(lat, lon):
     places = data.get("places", [])
     if not places:
         return ""
+    loc = places[0].get("location") or {}
+    if "latitude" not in loc or "longitude" not in loc:
+        return ""
+    if _dist_m(lat, lon, loc["latitude"], loc["longitude"]) > accept_m:
+        return ""                              # the pin isn't on this parcel
     return (places[0].get("displayName") or {}).get("text", "") or ""
 
 
@@ -361,7 +390,8 @@ def enrich_name(props, rings):
             if not _OSM["off"]:
                 time.sleep(0.4)   # be a good OpenStreetMap citizen
             if not name and GOOGLE_KEY:
-                name = name_from_google(lat, lon)
+                accept_m = _parcel_radius_m(rings, lat, lon) + 60.0
+                name = name_from_google(lat, lon, accept_m)
                 src = "google" if name else ""
     props["park_name"] = name
     props["name_source"] = src
