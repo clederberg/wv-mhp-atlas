@@ -47,11 +47,18 @@ function _addSignOut() {
   a.id = "atlas-signout";
   a.href = "#";
   a.textContent = "Sign out";
-  a.style.cssText = "position:fixed;bottom:12px;left:14px;font-size:12px;color:#6b7280;" +
-    "text-decoration:none;background:#fff;border:1px solid #e3e8e2;border-radius:6px;" +
-    "padding:4px 9px;z-index:9998;font-family:Lato,sans-serif";
   a.onclick = (e) => { e.preventDefault(); _clearTrust(); location.reload(); };
-  document.body.appendChild(a);
+  const nav = document.querySelector("nav.tabs");
+  if (nav) {
+    a.style.cssText = "color:#9c2f45;font-weight:700;font-size:14px;" +
+      "padding:8px 12px;text-decoration:none";
+    nav.appendChild(a);
+  } else {
+    a.style.cssText = "position:fixed;top:12px;right:14px;font-size:13px;color:#6b7280;" +
+      "text-decoration:none;background:#fff;border:1px solid #e3e8e2;border-radius:6px;" +
+      "padding:5px 10px;z-index:9998;font-family:Lato,sans-serif";
+    document.body.appendChild(a);
+  }
 }
 
 function _showGate(enc) {
@@ -67,17 +74,21 @@ function _showGate(enc) {
       '<input id="atlas-pw" type="password" placeholder="Password" autocomplete="current-password" style="width:100%;padding:11px 13px;border:1px solid #d7ddd6;border-radius:9px;font-size:15px;box-sizing:border-box">' +
       '<div id="atlas-err" style="color:#9c2f45;font-size:12.5px;min-height:16px;margin:8px 0 4px"></div>' +
       '<button id="atlas-go" style="width:100%;padding:11px;background:#1e4a24;color:#fff;border:none;border-radius:9px;font-size:15px;font-weight:700;cursor:pointer">Enter</button>' +
+      '<label style="display:flex;align-items:center;justify-content:center;gap:7px;margin-top:14px;color:#6b7280;font-size:13px;cursor:pointer">' +
+      '<input id="atlas-remember" type="checkbox" checked style="width:15px;height:15px;accent-color:#1e4a24;cursor:pointer">' +
+      'Remember this device for 30 days</label>' +
       '</div>';
     document.body.appendChild(ov);
     const inp = ov.querySelector("#atlas-pw");
     const err = ov.querySelector("#atlas-err");
     const btn = ov.querySelector("#atlas-go");
+    const remember = ov.querySelector("#atlas-remember");
     inp.focus();
     async function attempt() {
       btn.disabled = true; err.textContent = "";
       try {
         const fc = await _decrypt(enc, inp.value);
-        _saveTrust(inp.value);
+        if (remember.checked) _saveTrust(inp.value);
         document.body.removeChild(ov);
         _addSignOut();
         resolve(fc);
