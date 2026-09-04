@@ -35,3 +35,20 @@ function centroid(geom) {
 function isSample(fc) {
   return fc && fc.meta && fc.meta.sample === true;
 }
+
+// ZIP for a park: prefer the SAMS field, else pull a 5-digit ZIP out of the
+// physical address, so every park has a ZIP even if the field is blank.
+function zipOf(p) {
+  const s = (p.SAMSZip || "").toString().trim();
+  if (/^\d{5}/.test(s)) return s.slice(0, 5);
+  const m = ((p.FullPhysicalAddress || "") + " " + (p.FullOwnerAddress || "")).match(/\b(\d{5})\b/);
+  return m ? m[1] : "";
+}
+
+// Full 911 address with the ZIP appended if it isn't already in the string.
+function addressWithZip(p) {
+  const a = (p.FullPhysicalAddress || "").trim();
+  const z = zipOf(p);
+  if (!a) return z || "";
+  return z && !a.includes(z) ? `${a} ${z}` : a;
+}

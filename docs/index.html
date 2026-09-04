@@ -27,7 +27,8 @@
   <div id="banner"></div>
 
   <div class="controls">
-    <input type="search" id="q" placeholder="Filter by owner, address, or parcel id">
+    <input type="search" id="q" placeholder="Filter by owner, address, ZIP, or parcel id">
+    <select id="zip"><option value="">All ZIPs</option></select>
     <span class="count" id="count"></span>
   </div>
 
@@ -35,12 +36,12 @@
     <table id="tbl">
       <thead>
         <tr>
+          <th data-k="park_name">Park <span class="arrow"></span></th>
           <th data-k="FullOwnerName">Owner <span class="arrow"></span></th>
           <th data-k="FullPhysicalAddress">Park address <span class="arrow"></span></th>
           <th class="num" data-k="lot_count">Lots <span class="arrow"></span></th>
           <th class="num" data-k="TotalAppraisal">Assessed <span class="arrow"></span></th>
           <th class="num" data-k="est_market_value">Est. market <span class="arrow"></span></th>
-          <th data-k="PropertyClassDescription">Class <span class="arrow"></span></th>
           <th data-k="deed">Deed <span class="arrow"></span></th>
           <th data-k="recent_transfer">Status <span class="arrow"></span></th>
           <th data-k="ParcelID">Parcel <span class="arrow"></span></th>
@@ -65,9 +66,11 @@ function rowVal(p, k) {
 
 function render() {
   const q = document.getElementById("q").value.trim().toLowerCase();
+  const zipSel = document.getElementById("zip").value;
   let rows = PARKS.filter(p => {
+    if (zipSel && zipOf(p) !== zipSel) return false;
     if (!q) return true;
-    return [p.FullOwnerName, p.FullPhysicalAddress, p.ParcelID, p.FullOwnerAddress]
+    return [p.park_name, p.FullOwnerName, p.FullPhysicalAddress, p.ParcelID, p.FullOwnerAddress, zipOf(p)]
       .some(v => (v || "").toLowerCase().includes(q));
   });
   rows.sort((a, b) => {
@@ -87,12 +90,12 @@ function render() {
       ? `<span class="flag">transfer pending</span>`
       : "";
     tr.innerHTML = `
+      <td class="parkname">${p.park_name ? p.park_name : "<span class='muted'>&mdash;</span>"}</td>
       <td class="owner">${p.FullOwnerName || ""}</td>
-      <td>${p.FullPhysicalAddress || ""}<div class="addr">${p.FullOwnerAddress || ""}</div></td>
+      <td>${addressWithZip(p)}<div class="addr">${p.FullOwnerAddress || ""}</div></td>
       <td class="num">${num(p.lot_count)}</td>
       <td class="num">${money(p.TotalAppraisal)}</td>
       <td class="num">${money(p.est_market_value)}</td>
-      <td>${p.PropertyClassDescription || p.PropertyClassCode || ""}</td>
       <td class="num">${deed(p)}</td>
       <td>${status}${p.recent_transfer ? "<div class='addr'>to " + (p.NewOwner || "") + "</div>" : ""}</td>
       <td>${p.ParcelID || ""}</td>`;
@@ -114,14 +117,26 @@ document.querySelectorAll("thead th").forEach(th => {
   th.addEventListener("click", () => {
     const k = th.dataset.k;
     if (k === sortK) sortDir *= -1;
-    else { sortK = k; sortDir = (k === "FullOwnerName" || k === "FullPhysicalAddress") ? 1 : -1; }
+    else { sortK = k; sortDir = (k === "park_name" || k === "FullOwnerName" || k === "FullPhysicalAddress") ? 1 : -1; }
     render();
   });
 });
 document.getElementById("q").addEventListener("input", render);
+document.getElementById("zip").addEventListener("change", render);
+
+function fillZips() {
+  const zips = [...new Set(PARKS.map(zipOf).filter(Boolean))].sort();
+  const sel = document.getElementById("zip");
+  for (const z of zips) {
+    const o = document.createElement("option");
+    o.value = z; o.textContent = z;
+    sel.appendChild(o);
+  }
+}
 
 loadParks().then(fc => {
   PARKS = fc.features.map(f => f.properties);
+  fillZips();
   if (fc.meta) document.getElementById("sub").textContent =
     `${fc.meta.county || ""} County  \u00b7  built ${fc.meta.built || ""}`;
   if (isSample(fc)) document.getElementById("banner").innerHTML =
