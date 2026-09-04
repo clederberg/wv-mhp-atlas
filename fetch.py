@@ -20,6 +20,7 @@ GitHub Pages site picks the data up directly.
 import argparse
 import csv
 import json
+import re
 import sys
 import time
 from urllib.parse import urlencode
@@ -198,25 +199,51 @@ def _titlecase(s):
     return " ".join(out)
 
 
-def _street_name(addr):
-    """Street portion of a 911 address, with the house number stripped."""
-    part = (addr or "").split(",")[0].strip()
-    import re
-    m = re.match(r"^\s*\d+[A-Za-z]?\s+(.*)$", part)
-    return (m.group(1) if m else part).strip()
+# Common abbreviations that show up in park street names.
+_ABBR = {
+    "VLG": "VILLAGE", "VLGE": "VILLAGE", "VLGS": "VILLAGES",
+    "ESTS": "ESTATES", "MDWS": "MEADOWS", "HTS": "HEIGHTS",
+    "GRV": "GROVE", "TER": "TERRACE", "TERR": "TERRACE",
+    "TRLR": "TRAILER", "MBL": "MOBILE", "HMS": "HOMES",
+    "CMTY": "COMMUNITY", "CT": "COURT", "PK": "PARK",
+}
+
+_STATES = {"WV", "VA", "MD", "PA", "OH", "KY"}
 
 
-def name_from_street(addr):
-    """Return a park name from the street, or '' if the street is a plain road."""
-    s = _street_name(addr)
-    if not s:
+def _street_tokens(props):
+    """Uppercase street words with house number, city, state, and ZIP removed."""
+    raw = (props.get("SAMSAddress") or "").strip()
+    if not raw:
+        raw = (props.get("FullPhysicalAddress") or "").split(",")[0].strip()
+    city_words = set((props.get("SAMSCity") or "").upper().split())
+    toks = [t for t in re.split(r"\s+", raw.upper()) if t]
+    if toks and re.fullmatch(r"\d+[A-Z]?", toks[0]):
+        toks = toks[1:]                       # drop leading house number
+    while toks:                               # drop trailing city / state / zip / stray numbers
+        t = toks[-1]
+        if (re.fullmatch(r"\d{5}(-\d{4})?", t) or re.fullmatch(r"\d+", t)
+                or t in _STATES or t in city_words):
+            toks.pop()
+        else:
+            break
+    return toks
+
+
+def name_from_street(props):
+    """Park name derived from the street, or '' if it's a plain public road."""
+    toks = _street_tokens(props)
+    if not toks:
         return ""
-    last = s.split()[-1].upper().strip(".")
-    if last in PARK_SUFFIX:
-        return _titlecase(s)
-    if last in ROAD_SUFFIX:
-        return ""            # generic road, not a park name
-    return _titlecase(s)      # no road suffix, likely a proper name
+    toks = [_ABBR.get(t, t) for t in toks]    # expand abbreviations
+    if toks[-1] in ROAD_SUFFIX:
+        inner = toks[:-1]
+        # keep only if the road name itself is park-ish, e.g. "Sunrise Village Rd"
+        if inner and any(w in PARK_SUFFIX for w in inner):
+            toks = inner
+        else:
+            return ""                         # plain road, not a park name
+    return _titlecase(" ".join(toks))
 
 
 def _centroid_lonlat(rings):
@@ -269,7 +296,7 @@ def name_from_osm(lat, lon):
 
 def enrich_name(props, rings):
     """Set props['park_name'] and props['name_source'] using the free waterfall."""
-    name = name_from_street(props.get("FullPhysicalAddress", ""))
+    name = name_from_street(props)
     src = "street" if name else ""
     if not name:
         c = _centroid_lonlat(rings)
