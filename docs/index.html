@@ -42,9 +42,9 @@
           <th class="num" data-k="lot_count">Lots <span class="arrow"></span></th>
           <th class="num" data-k="TotalAppraisal">Assessed <span class="arrow"></span></th>
           <th class="num" data-k="est_market_value">Est. market <span class="arrow"></span></th>
-          <th data-k="deed">Deed <span class="arrow"></span></th>
+          <th class="nowrap" data-k="deed">Last transfer <span class="arrow"></span></th>
           <th data-k="recent_transfer">Status <span class="arrow"></span></th>
-          <th data-k="ParcelID">Parcel <span class="arrow"></span></th>
+          <th class="nowrap" data-k="ParcelID">Parcel <span class="arrow"></span></th>
         </tr>
       </thead>
       <tbody id="rows"></tbody>
@@ -96,9 +96,9 @@ function render() {
       <td class="num">${num(p.lot_count)}</td>
       <td class="num">${money(p.TotalAppraisal)}</td>
       <td class="num">${money(p.est_market_value)}</td>
-      <td class="num">${deed(p)}</td>
+      <td class="num nowrap">${deed(p) || "<span class='muted'>&mdash;</span>"}</td>
       <td>${status}${p.recent_transfer ? "<div class='addr'>to " + (p.NewOwner || "") + "</div>" : ""}</td>
-      <td>${p.ParcelID || ""}</td>`;
+      <td class="nowrap">${p.parcel_count > 1 ? p.parcel_count + " parcels" : (p.ParcelID || "")}</td>`;
     tb.appendChild(tr);
   }
   document.getElementById("count").textContent =
@@ -142,7 +142,7 @@ loadParks().then(fc => {
   if (isSample(fc)) document.getElementById("banner").innerHTML =
     `<div class="sample-banner">Sample data. Run <code>python fetch.py</code> to replace this with live Monongalia parcels.</div>`;
   document.getElementById("note").textContent =
-    "Est. market = assessed / 0.6 (WV assesses at 60% of appraised value). Lots = E-911 address points inside the parcel. Sale price is not in this dataset and requires a county clerk deed lookup.";
+    "Parks spanning multiple parcels are combined into one row, with lots, acreage, and values summed. Est. market = assessed / 0.6 (WV assesses at 60% of appraised value). Lots = E-911 address points inside the parcel. Last transfer shows the recorded deed reference; the assessor feed carries no sale date or price (those require a county clerk lookup).";
   render();
 }).catch(e => {
   document.getElementById("rows").innerHTML =

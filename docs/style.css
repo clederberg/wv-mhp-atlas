@@ -174,3 +174,5 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   font-size: 13px;
   margin-bottom: 18px;
 }
+
+.nowrap { white-space: nowrap; }

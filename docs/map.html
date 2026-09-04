@@ -45,7 +45,7 @@ function popup(p) {
     ${p.park_name ? `<b style="font-size:14.5px">${p.park_name}</b><br>` : ""}
     <b>${p.FullOwnerName || "Unknown owner"}</b><br>
     ${addressWithZip(p)}<br>
-    <b>Lots (E-911):</b> ${p.lot_count ?? "?"}<br>
+    <b>Lots (E-911):</b> ${p.lot_count ?? "?"}${p.parcel_count > 1 ? ` &nbsp;·&nbsp; ${p.parcel_count} parcels` : ""}<br>
     <b>Assessed:</b> ${money(p.TotalAppraisal)} &nbsp; <b>Est. market:</b> ${money(p.est_market_value)}<br>
     <b>Parcel:</b> ${p.ParcelID || ""}<br>
     ${p.recent_transfer ? `<span style="color:${FLAG}"><b>Transfer pending to ${p.NewOwner || "?"}</b></span>` : ""}`;
