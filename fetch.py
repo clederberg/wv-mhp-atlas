@@ -164,7 +164,125 @@ def count_addresses(rings):
     return data.get("count", 0)
 
 
-def build(county, out_geojson, out_csv, do_lots=True):
+# ---------------------------------------------------------------------------
+# Park-name enrichment. Free, no API key. Two passes:
+#   1) the street name off the 911 address (park drives often carry the name)
+#   2) OpenStreetMap around the parcel, for anything the street name misses
+# ---------------------------------------------------------------------------
+
+OVERPASS = "https://overpass-api.de/api/interpreter"
+UA = "wv-mhp-atlas/1.0 (SCH Properties internal tool)"
+
+# If the street ends in one of these, it is a public road, not a park name.
+ROAD_SUFFIX = {
+    "RD", "ROAD", "ST", "STREET", "AVE", "AVENUE", "DR", "DRIVE", "LN", "LANE",
+    "WAY", "HWY", "HIGHWAY", "PIKE", "BLVD", "CIR", "CIRCLE", "PL", "PLACE",
+    "ROUTE", "RT", "RUN", "HOLLOW", "HOLW", "BRANCH", "FORK", "PATH", "TRL",
+    "TRAIL", "LOOP", "BEND", "CROSSING", "XING", "PKWY",
+}
+# If the street ends in one of these, it is almost certainly the park name.
+PARK_SUFFIX = {
+    "VILLAGE", "ESTATES", "ESTATE", "PARK", "ACRES", "MANOR", "TERRACE",
+    "MEADOWS", "COURT", "CT", "COMMUNITY", "MHP", "MHC", "VILLA", "VILLAS",
+    "HEIGHTS", "GARDENS", "GROVE", "COMMONS",
+}
+
+
+_ACRONYMS = {"MHP", "MHC", "LLC", "RV", "II", "III"}
+
+
+def _titlecase(s):
+    out = []
+    for w in s.split():
+        out.append(w.upper() if w.upper() in _ACRONYMS else w.capitalize())
+    return " ".join(out)
+
+
+def _street_name(addr):
+    """Street portion of a 911 address, with the house number stripped."""
+    part = (addr or "").split(",")[0].strip()
+    import re
+    m = re.match(r"^\s*\d+[A-Za-z]?\s+(.*)$", part)
+    return (m.group(1) if m else part).strip()
+
+
+def name_from_street(addr):
+    """Return a park name from the street, or '' if the street is a plain road."""
+    s = _street_name(addr)
+    if not s:
+        return ""
+    last = s.split()[-1].upper().strip(".")
+    if last in PARK_SUFFIX:
+        return _titlecase(s)
+    if last in ROAD_SUFFIX:
+        return ""            # generic road, not a park name
+    return _titlecase(s)      # no road suffix, likely a proper name
+
+
+def _centroid_lonlat(rings):
+    pts = rings[0] if rings else []
+    if not pts:
+        return None
+    lon = sum(p[0] for p in pts) / len(pts)
+    lat = sum(p[1] for p in pts) / len(pts)
+    return lon, lat
+
+
+def name_from_osm(lat, lon):
+    """Nearest named mobile-home-ish feature in OpenStreetMap, or ''."""
+    ql = (
+        "[out:json][timeout:25];("
+        f'nwr(around:220,{lat},{lon})["name"]["landuse"="residential"];'
+        f'nwr(around:220,{lat},{lon})["name"]["tourism"="caravan_site"];'
+        f'nwr(around:220,{lat},{lon})["name"]["place"="neighbourhood"];'
+        ");out center tags;"
+    )
+    try:
+        body = urlencode({"data": ql}).encode()
+        req = Request(OVERPASS, data=body, headers={"User-Agent": UA})
+        with urlopen(req, timeout=60) as r:
+            data = json.loads(r.read().decode("utf-8"))
+    except Exception:
+        return ""
+    best, best_d = "", 1e9
+    for el in data.get("elements", []):
+        tags = el.get("tags", {})
+        name = tags.get("name")
+        if not name:
+            continue
+        if "lat" in el:
+            elat, elon = el["lat"], el["lon"]
+        elif "center" in el:
+            elat, elon = el["center"]["lat"], el["center"]["lon"]
+        else:
+            continue
+        blob = (tags.get("residential", "") + " " + name).lower()
+        parky = any(w in blob for w in (
+            "trailer", "mobile", "manufactured", "caravan", "mhp", "mhc",
+            "village", "estates", "park", "court", "community"))
+        if tags.get("tourism") == "caravan_site" or parky:
+            d = (elat - lat) ** 2 + (elon - lon) ** 2
+            if d < best_d:
+                best_d, best = d, name
+    return best
+
+
+def enrich_name(props, rings):
+    """Set props['park_name'] and props['name_source'] using the free waterfall."""
+    name = name_from_street(props.get("FullPhysicalAddress", ""))
+    src = "street" if name else ""
+    if not name:
+        c = _centroid_lonlat(rings)
+        if c:
+            lon, lat = c
+            name = name_from_osm(lat, lon)
+            src = "osm" if name else ""
+            time.sleep(1)   # be a good OpenStreetMap citizen
+    props["park_name"] = name
+    props["name_source"] = src
+
+
+def build(county, out_geojson, out_csv, do_lots=True, do_names=True, min_lots=0):
     where = park_where(county)
     print(f"Querying parks in {county.upper()} ...")
     summary = page_query(SUMMARY, where, out_fields=",".join(SUMMARY_FIELDS))
@@ -216,6 +334,26 @@ def build(county, out_geojson, out_csv, do_lots=True):
     if not features:
         print("  parks matched but no geometry came back. Send Claude the run log.")
 
+    # Drop very small parks if a threshold was given (we don't chase those).
+    if min_lots and any(f["properties"].get("lot_count") is not None for f in features):
+        before = len(features)
+        features = [f for f in features
+                    if (f["properties"].get("lot_count") or 0) >= min_lots]
+        print(f"  kept {len(features)} parks with >= {min_lots} lots (from {before})")
+
+    # Resolve park names: street name first, then OpenStreetMap. Free, no key.
+    if do_names:
+        print("Resolving park names ...")
+        for f in features:
+            enrich_name(f["properties"], f["geometry"]["coordinates"])
+            p = f["properties"]
+            label = p.get("park_name") or "(unnamed)"
+            print(f"  {label[:34]:34}  [{p.get('name_source') or '-'}]")
+    else:
+        for f in features:
+            f["properties"].setdefault("park_name", "")
+            f["properties"].setdefault("name_source", "")
+
     fc = {"type": "FeatureCollection", "features": features,
           "meta": {"county": county.upper(), "built": time.strftime("%Y-%m-%d"),
                    "source": "WV GIS Technical Center WV_Parcels service"}}
@@ -223,8 +361,8 @@ def build(county, out_geojson, out_csv, do_lots=True):
         json.dump(fc, fh)
     print(f"\nwrote {out_geojson}  ({len(features)} parks)")
 
-    cols = ["FullOwnerName", "FullPhysicalAddress", "lot_count",
-            "TotalAppraisal", "est_market_value", "PropertyClassDescription",
+    cols = ["park_name", "name_source", "FullOwnerName", "FullPhysicalAddress",
+            "lot_count", "TotalAppraisal", "est_market_value",
             "DeedBook", "DeedPage", "recent_transfer", "NewOwner",
             "ParcelID", "FullOwnerAddress", "DeededAcres", "TaxYear"]
     with open(out_csv, "w", newline="") as fh:
@@ -243,6 +381,10 @@ def main():
                     help="list land-use labels in the county and exit")
     ap.add_argument("--no-lots", action="store_true",
                     help="skip the per-park address-point lot count")
+    ap.add_argument("--no-names", action="store_true",
+                    help="skip park-name resolution (street name + OpenStreetMap)")
+    ap.add_argument("--min-lots", type=int, default=0,
+                    help="drop parks with fewer than this many lots (0 = keep all)")
     ap.add_argument("--out", default="docs/parks.geojson")
     ap.add_argument("--csv", default="docs/parks.csv")
     args = ap.parse_args()
@@ -250,7 +392,10 @@ def main():
     if args.discover:
         discover(args.county)
     else:
-        build(args.county, args.out, args.csv, do_lots=not args.no_lots)
+        build(args.county, args.out, args.csv,
+              do_lots=not args.no_lots,
+              do_names=not args.no_names,
+              min_lots=args.min_lots)
 
 
 if __name__ == "__main__":
