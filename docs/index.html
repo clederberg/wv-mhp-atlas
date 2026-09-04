@@ -59,6 +59,29 @@
 let PARKS = [];
 let sortK = "lot_count", sortDir = -1;
 
+function copyBook(book) {
+  if (!book) return;
+  try { navigator.clipboard.writeText(book); } catch (e) { /* ignore */ }
+  toast(`Book ${book} copied \u2014 paste into Book #`);
+}
+
+function toast(msg) {
+  let t = document.getElementById("atlas-toast");
+  if (!t) {
+    t = document.createElement("div");
+    t.id = "atlas-toast";
+    t.style.cssText = "position:fixed;bottom:18px;left:50%;transform:translateX(-50%);" +
+      "background:#1e4a24;color:#fff;padding:9px 16px;border-radius:8px;font-size:13px;" +
+      "font-family:Lato,sans-serif;z-index:9999;box-shadow:0 4px 14px rgba(0,0,0,.2);" +
+      "opacity:0;transition:opacity .15s";
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.style.opacity = "1";
+  clearTimeout(t._h);
+  t._h = setTimeout(() => { t.style.opacity = "0"; }, 2200);
+}
+
 function rowVal(p, k) {
   if (k === "deed") return deed(p);
   return p[k];
@@ -97,7 +120,7 @@ function render() {
       <td class="num">${money(p.TotalAppraisal)}</td>
       <td class="num">${money(p.est_market_value)}</td>
       <td class="num nowrap">${deed(p)
-        ? `<a href="https://searchrecords.monongaliacountyclerk.com/" target="_blank" rel="noopener" title="Opens the Monongalia County Clerk record search in a new tab. Look up this book/page there for the recording date.">${deed(p)}</a>`
+        ? `<a href="https://searchrecords.monongaliacountyclerk.com/" target="_blank" rel="noopener" onclick="copyBook('${(p.DeedBook || '').trim()}')" title="Opens the Monongalia County Clerk search and copies the book number (${(p.DeedBook || '').trim()}) to your clipboard. Paste into Book #, then type the page.">${deed(p)}</a>`
         : "<span class='muted'>&mdash;</span>"}</td>
       <td>${status}${p.recent_transfer ? "<div class='addr'>to " + (p.NewOwner || "") + "</div>" : ""}</td>
       <td class="nowrap">${p.parcel_count > 1 ? p.parcel_count + " parcels" : (p.ParcelID || "")}</td>`;
