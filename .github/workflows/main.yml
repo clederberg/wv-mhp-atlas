@@ -19,6 +19,9 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install dependencies
+        run: pip install cryptography
+
       # Prints every land-use label in the county into the run log,
       # so if the park filter misses anything you can see the real names.
       - name: List land-use labels
@@ -26,13 +29,14 @@ jobs:
 
       - name: Fetch parks
         env:
-         GOOGLE_PLACES_KEY: ${{ secrets.GOOGLE_PLACES_KEY }}
+          GOOGLE_PLACES_KEY: ${{ secrets.GOOGLE_PLACES_KEY }}
+          SITE_PASSWORD: ${{ secrets.SITE_PASSWORD }}
         run: python fetch.py --county MONONGALIA
 
       - name: Commit data
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
-          git add docs/parks.geojson docs/parks.csv
+          git add -A docs
           git commit -m "Update MHP data" || echo "no changes to commit"
           git push
