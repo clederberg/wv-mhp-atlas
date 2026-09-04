@@ -20,6 +20,7 @@ GitHub Pages site picks the data up directly.
 import argparse
 import csv
 import json
+import os
 import re
 import sys
 import time
@@ -216,10 +217,16 @@ _STATES = {"WV", "VA", "MD", "PA", "OH", "KY"}
 
 def _street_tokens(props):
     """Uppercase street words with house number, city, state, and ZIP removed."""
+    fpa = props.get("FullPhysicalAddress") or ""
     raw = (props.get("SAMSAddress") or "").strip()
     if not raw:
-        raw = (props.get("FullPhysicalAddress") or "").split(",")[0].strip()
+        raw = fpa.split(",")[0].strip()
     city_words = set((props.get("SAMSCity") or "").upper().split())
+    # The word right before a ZIP in the physical address is the city; strip it
+    # too, which covers records where the SAMS city field is blank.
+    m = re.search(r"([A-Za-z]+)\s+\d{5}\b", fpa)
+    if m:
+        city_words.add(m.group(1).upper())
     toks = [t for t in re.split(r"\s+", raw.upper()) if t]
     if toks and re.fullmatch(r"\d+[A-Z]?", toks[0]):
         toks = toks[1:]                       # drop leading house number
@@ -256,6 +263,43 @@ def _centroid_lonlat(rings):
     lon = sum(p[0] for p in pts) / len(pts)
     lat = sum(p[1] for p in pts) / len(pts)
     return lon, lat
+
+
+# Google Places (New) as the paid fallback. Key comes from the environment
+# (the GitHub Actions secret GOOGLE_PLACES_KEY), never from a committed file.
+# Only unnamed parks reach this, and only the displayName field is requested,
+# which keeps every call in the cheap "Pro" tier with its 5,000 free/month.
+GOOGLE_KEY = os.environ.get("GOOGLE_PLACES_KEY", "").strip()
+PLACES_URL = "https://places.googleapis.com/v1/places:searchText"
+_GOOG = {"calls": 0}
+
+
+def name_from_google(lat, lon):
+    """Nearest Google-listed mobile home park to the point, or ''."""
+    if not GOOGLE_KEY:
+        return ""
+    payload = json.dumps({
+        "textQuery": "mobile home park",
+        "locationBias": {"circle": {
+            "center": {"latitude": lat, "longitude": lon}, "radius": 350.0}},
+        "maxResultCount": 1,
+    }).encode()
+    req = Request(PLACES_URL, data=payload, headers={
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": GOOGLE_KEY,
+        "X-Goog-FieldMask": "places.displayName",
+    })
+    try:
+        with urlopen(req, timeout=15) as r:
+            data = json.loads(r.read().decode("utf-8"))
+        _GOOG["calls"] += 1
+    except Exception as e:
+        print(f"  google lookup failed ({e})")
+        return ""
+    places = data.get("places", [])
+    if not places:
+        return ""
+    return (places[0].get("displayName") or {}).get("text", "") or ""
 
 
 def name_from_osm(lat, lon):
@@ -316,6 +360,9 @@ def enrich_name(props, rings):
             src = "osm" if name else ""
             if not _OSM["off"]:
                 time.sleep(0.4)   # be a good OpenStreetMap citizen
+            if not name and GOOGLE_KEY:
+                name = name_from_google(lat, lon)
+                src = "google" if name else ""
     props["park_name"] = name
     props["name_source"] = src
 
@@ -387,6 +434,8 @@ def build(county, out_geojson, out_csv, do_lots=True, do_names=True, min_lots=0)
             p = f["properties"]
             label = p.get("park_name") or "(unnamed)"
             print(f"  {label[:34]:34}  [{p.get('name_source') or '-'}]")
+        if GOOGLE_KEY:
+            print(f"  google lookups used this run: {_GOOG['calls']}")
     else:
         for f in features:
             f["properties"].setdefault("park_name", "")
