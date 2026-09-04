@@ -411,6 +411,111 @@ def encrypt_json(text, password):
     return {"v": 1, "iter": iters, "salt": b(salt), "iv": b(iv), "ct": b(ct)}
 
 
+def _norm_owner(s):
+    s = re.sub(r"[^A-Z0-9 ]", " ", (s or "").upper())
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def _num(p, k):
+    v = p.get(k)
+    return v if isinstance(v, (int, float)) else 0
+
+
+def _merge_group(members):
+    """Fold several parcels of one park into a single feature."""
+    if len(members) == 1:
+        f = members[0]
+        p = f["properties"]
+        p["parcel_count"] = 1
+        p["parcels"] = [{"ParcelID": p.get("ParcelID"), "lot_count": p.get("lot_count"),
+                         "TotalAppraisal": p.get("TotalAppraisal"),
+                         "FullPhysicalAddress": p.get("FullPhysicalAddress")}]
+        return f
+
+    from collections import Counter
+    names = [m["properties"].get("park_name") for m in members
+             if (m["properties"].get("park_name") or "").strip()]
+    park_name = Counter(names).most_common(1)[0][0] if names else ""
+
+    rep = max(members, key=lambda m: _num(m["properties"], "lot_count"))["properties"]
+    total = sum(_num(m["properties"], "TotalAppraisal") for m in members)
+    acres = sum(_num(m["properties"], "DeededAcres") for m in members)
+    props = {
+        "park_name": park_name,
+        "name_source": next((m["properties"].get("name_source") for m in members
+                             if (m["properties"].get("park_name") or "").strip()), ""),
+        "FullOwnerName": rep.get("FullOwnerName", ""),
+        "FullOwnerAddress": rep.get("FullOwnerAddress", ""),
+        "FullPhysicalAddress": rep.get("FullPhysicalAddress", ""),
+        "SAMSCity": rep.get("SAMSCity", ""),
+        "SAMSZip": rep.get("SAMSZip", ""),
+        "lot_count": sum(_num(m["properties"], "lot_count") for m in members),
+        "LandAppraisal": sum(_num(m["properties"], "LandAppraisal") for m in members),
+        "BuildingAppraisal": sum(_num(m["properties"], "BuildingAppraisal") for m in members),
+        "TotalAppraisal": total,
+        "est_market_value": round(total / 0.6) if total else None,
+        "DeededAcres": round(acres, 2) if acres else acres,
+        "DeedBook": rep.get("DeedBook", ""),
+        "DeedPage": rep.get("DeedPage", ""),
+        "recent_transfer": any(bool((m["properties"].get("NewOwner") or "").strip())
+                               for m in members),
+        "NewOwner": rep.get("NewOwner", ""),
+        "TaxYear": rep.get("TaxYear"),
+        "PropertyClassDescription": rep.get("PropertyClassDescription", ""),
+        "ParcelID": " + ".join(m["properties"].get("ParcelID", "") for m in members
+                               if m["properties"].get("ParcelID")),
+        "parcel_count": len(members),
+        "parcels": [{"ParcelID": m["properties"].get("ParcelID"),
+                     "lot_count": m["properties"].get("lot_count"),
+                     "TotalAppraisal": m["properties"].get("TotalAppraisal"),
+                     "FullPhysicalAddress": m["properties"].get("FullPhysicalAddress")}
+                    for m in members],
+    }
+    polys = []
+    for m in members:
+        g = m["geometry"]
+        if g["type"] == "Polygon":
+            polys.append(g["coordinates"])
+        elif g["type"] == "MultiPolygon":
+            polys.extend(g["coordinates"])
+    return {"type": "Feature", "properties": props,
+            "geometry": {"type": "MultiPolygon", "coordinates": polys}}
+
+
+def merge_parcels(features, dist_m=500.0):
+    """Group parcels with the same owner whose centroids are close, then merge."""
+    n = len(features)
+    parent = list(range(n))
+
+    def find(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    def union(a, b):
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[rb] = ra
+
+    cents, owners = [], []
+    for f in features:
+        cents.append(_centroid_lonlat(f["geometry"]["coordinates"]))
+        owners.append(_norm_owner(f["properties"].get("FullOwnerName")))
+
+    for i in range(n):
+        for j in range(i + 1, n):
+            if (owners[i] and owners[i] == owners[j] and cents[i] and cents[j]
+                    and _dist_m(cents[i][1], cents[i][0],
+                                cents[j][1], cents[j][0]) <= dist_m):
+                union(i, j)
+
+    groups = {}
+    for i in range(n):
+        groups.setdefault(find(i), []).append(i)
+    return [_merge_group([features[i] for i in idxs]) for idxs in groups.values()]
+
+
 def build(county, out_geojson, out_csv, do_lots=True, do_names=True, min_lots=0):
     where = park_where(county)
     print(f"Querying parks in {county.upper()} ...")
@@ -463,27 +568,33 @@ def build(county, out_geojson, out_csv, do_lots=True, do_names=True, min_lots=0)
     if not features:
         print("  parks matched but no geometry came back. Send Claude the run log.")
 
-    # Drop very small parks if a threshold was given (we don't chase those).
-    if min_lots and any(f["properties"].get("lot_count") is not None for f in features):
-        before = len(features)
-        features = [f for f in features
-                    if (f["properties"].get("lot_count") or 0) >= min_lots]
-        print(f"  kept {len(features)} parks with >= {min_lots} lots (from {before})")
-
-    # Resolve park names: street name first, then OpenStreetMap. Free, no key.
+    # Resolve park names per parcel: street name, then OpenStreetMap, then Google.
     if do_names:
         print("Resolving park names ...")
         for f in features:
             enrich_name(f["properties"], f["geometry"]["coordinates"])
-            p = f["properties"]
-            label = p.get("park_name") or "(unnamed)"
-            print(f"  {label[:34]:34}  [{p.get('name_source') or '-'}]")
         if GOOGLE_KEY:
             print(f"  google lookups used this run: {_GOOG['calls']}")
     else:
         for f in features:
             f["properties"].setdefault("park_name", "")
             f["properties"].setdefault("name_source", "")
+
+    # Combine parcels that belong to the same park (same owner, close together).
+    before = len(features)
+    features = merge_parcels(features)
+    print(f"Merged {before} parcels into {len(features)} parks")
+    for f in features:
+        p = f["properties"]
+        label = p.get("park_name") or "(unnamed)"
+        extra = f"  ({p['parcel_count']} parcels)" if p.get("parcel_count", 1) > 1 else ""
+        print(f"  {label[:32]:32}  lots~{p.get('lot_count')}{extra}")
+
+    # Drop very small parks if a threshold was given (we don't chase those).
+    if min_lots:
+        kept = [f for f in features if (f["properties"].get("lot_count") or 0) >= min_lots]
+        print(f"  kept {len(kept)} parks with >= {min_lots} lots (from {len(features)})")
+        features = kept
 
     fc = {"type": "FeatureCollection", "features": features,
           "meta": {"county": county.upper(), "built": time.strftime("%Y-%m-%d"),
@@ -510,7 +621,7 @@ def build(county, out_geojson, out_csv, do_lots=True, do_names=True, min_lots=0)
     print(f"\nwrote {out_geojson}  ({len(features)} parks)")
 
     cols = ["park_name", "name_source", "FullOwnerName", "FullPhysicalAddress",
-            "lot_count", "TotalAppraisal", "est_market_value",
+            "lot_count", "parcel_count", "TotalAppraisal", "est_market_value",
             "DeedBook", "DeedPage", "recent_transfer", "NewOwner",
             "ParcelID", "FullOwnerAddress", "DeededAcres", "TaxYear"]
     with open(out_csv, "w", newline="") as fh:
