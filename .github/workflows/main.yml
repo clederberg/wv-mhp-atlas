@@ -25,6 +25,8 @@ jobs:
         run: python fetch.py --discover || true
 
       - name: Fetch parks
+        env:
+         GOOGLE_PLACES_KEY: ${{ secrets.GOOGLE_PLACES_KEY }}
         run: python fetch.py --county MONONGALIA
 
       - name: Commit data
