@@ -176,3 +176,6 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 }
 
 .nowrap { white-space: nowrap; }
+
+.tablewrap a { color: var(--brand); text-decoration: none; font-weight: 600; }
+.tablewrap a:hover { text-decoration: underline; }

@@ -96,7 +96,9 @@ function render() {
       <td class="num">${num(p.lot_count)}</td>
       <td class="num">${money(p.TotalAppraisal)}</td>
       <td class="num">${money(p.est_market_value)}</td>
-      <td class="num nowrap">${deed(p) || "<span class='muted'>&mdash;</span>"}</td>
+      <td class="num nowrap">${deed(p)
+        ? `<a href="https://searchrecords.monongaliacountyclerk.com/" target="_blank" rel="noopener" title="Opens the Monongalia County Clerk record search in a new tab. Look up this book/page there for the recording date.">${deed(p)}</a>`
+        : "<span class='muted'>&mdash;</span>"}</td>
       <td>${status}${p.recent_transfer ? "<div class='addr'>to " + (p.NewOwner || "") + "</div>" : ""}</td>
       <td class="nowrap">${p.parcel_count > 1 ? p.parcel_count + " parcels" : (p.ParcelID || "")}</td>`;
     tb.appendChild(tr);
