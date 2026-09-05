@@ -154,6 +154,8 @@ function isSample(fc) {
 // ZIP for a park: prefer the SAMS field, else pull a 5-digit ZIP out of the
 // physical address, so every park has a ZIP even if the field is blank.
 function zipOf(p) {
+  const e = (p.edit_zip || "").toString().trim();
+  if (/^\d{5}/.test(e)) return e.slice(0, 5);
   const s = (p.SAMSZip || "").toString().trim();
   if (/^\d{5}/.test(s)) return s.slice(0, 5);
   const m = ((p.FullPhysicalAddress || "") + " " + (p.FullOwnerAddress || "")).match(/\b(\d{5})\b/);
@@ -163,7 +165,21 @@ function zipOf(p) {
 // Full 911 address with the ZIP appended if it isn't already in the string.
 function addressWithZip(p) {
   const a = (p.FullPhysicalAddress || "").trim();
-  const z = zipOf(p);
+  const z = (p.SAMSZip || "").toString().trim();
   if (!a) return z || "";
   return z && !a.includes(z) ? `${a} ${z}` : a;
+}
+
+// A human-entered address composed from the corrected parts, or "".
+function verifiedAddress(p) {
+  if (!p.address_verified) return "";
+  const line1 = (p.edit_street || "").trim();
+  const cityState = [p.edit_city, p.edit_state].map(x => (x || "").trim()).filter(Boolean).join(", ");
+  const line2 = [cityState, (p.edit_zip || "").trim()].filter(Boolean).join(" ");
+  return [line1, line2].filter(Boolean).join(", ");
+}
+
+// What to show as the park's address: verified if present, else assessor's.
+function displayAddress(p) {
+  return verifiedAddress(p) || addressWithZip(p);
 }

@@ -117,7 +117,7 @@ function openDetail(p) {
     <h2>${p.park_name || "Unnamed park"}</h2>
     <div class="detail-owner">${p.FullOwnerName || ""}</div>
     <div class="detail-grid">
-      ${_kv("Lots (E-911)", num(p.lot_count))}
+      ${_kv(p.lot_count_verified ? "Lots (verified)" : "Lots (E-911)", num(p.lot_count))}
       ${_kv("Parcels", p.parcel_count || 1)}
       ${_kv("Assessed", money(p.TotalAppraisal))}
       ${_kv("Est. market", money(p.est_market_value))}
@@ -127,8 +127,9 @@ function openDetail(p) {
       ${_kv("Name source", p.name_source || "")}
     </div>
     <div class="detail-sec">
-      <h3>Location</h3>
-      <div>${addressWithZip(p)}</div>
+      <h3>Location ${p.address_verified ? '<span class="addr" style="text-transform:none;font-weight:400">\u00b7 verified</span>' : ''}</h3>
+      <div>${displayAddress(p)}</div>
+      ${p.address_verified ? `<div class="addr">Assessor: ${addressWithZip(p)}</div>` : ''}
       <div class="addr">Owner mailing: ${p.FullOwnerAddress || "&mdash;"}</div>
     </div>
     <div class="detail-sec">
@@ -184,7 +185,8 @@ function render() {
   let rows = PARKS.filter(p => {
     if (zipSel && zipOf(p) !== zipSel) return false;
     if (!q) return true;
-    return [p.park_name, p.FullOwnerName, p.FullPhysicalAddress, p.ParcelID, p.FullOwnerAddress, zipOf(p)]
+    return [p.park_name, p.FullOwnerName, p.FullPhysicalAddress, p.ParcelID, p.FullOwnerAddress,
+            zipOf(p), p.edit_street, p.edit_city, p.edit_state]
       .some(v => (v || "").toLowerCase().includes(q));
   });
   rows.sort((a, b) => {
@@ -208,7 +210,7 @@ function render() {
     tr.innerHTML = `
       <td class="parkname">${p.park_name ? p.park_name : "<span class='muted'>&mdash;</span>"}</td>
       <td class="owner">${p.FullOwnerName || ""}</td>
-      <td>${addressWithZip(p)}<div class="addr">${p.FullOwnerAddress || ""}</div></td>
+      <td>${displayAddress(p)}<div class="addr">${p.FullOwnerAddress || ""}</div></td>
       <td class="num">${num(p.lot_count)}</td>
       <td class="num">${money(p.TotalAppraisal)}</td>
       <td class="num">${money(p.est_market_value)}</td>
