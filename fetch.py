@@ -581,12 +581,25 @@ def apply_edits(features):
         if lc:
             try:
                 target["lot_count"] = int(float(lc))
+                target["lot_count_verified"] = True
             except ValueError:
                 pass
         for col, key in EDIT_MAP.items():
             v = (row.get(col) or "").strip()
             if v:
                 target[key] = v
+        # Corrected address parts (any subset). Mark verified if any provided.
+        addr_parts = {
+            "Correct street address": "edit_street",
+            "Correct city": "edit_city",
+            "Correct ZIP": "edit_zip",
+            "Correct State": "edit_state",
+        }
+        for col, key in addr_parts.items():
+            v = (row.get(col) or "").strip()
+            if v:
+                target[key] = v
+                target["address_verified"] = True
         target["edited"] = True
         if (row.get("Timestamp") or "").strip():
             target["edited_at"] = row["Timestamp"].strip()
