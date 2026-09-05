@@ -516,6 +516,84 @@ def merge_parcels(features, dist_m=500.0):
     return [_merge_group([features[i] for i in idxs]) for idxs in groups.values()]
 
 
+# Manual edits submitted through the Google Form, published as CSV.
+EDITS_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR0ruXh4ceSOJXKry0EPdmYi4pS8qkvvorr6dWE0Ot_czNjD8ZFrcLbT9VzGqr3aek4spPk4nNNtW9w/pub?gid=18138080&single=true&output=csv"
+
+# Spreadsheet column -> park property key.
+EDIT_MAP = {
+    "Single-wide lot rent": "rent_single",
+    "Double-wide lot rent": "rent_double",
+    "Park-owned homes count": "count_park_owned",
+    "RV count": "count_rv",
+    "Single-family home count": "count_sfh",
+    "Other count": "count_other",
+    "Notes": "notes",
+}
+
+
+def _park_id_tokens(props):
+    toks = set()
+    for t in (props.get("ParcelID") or "").split("+"):
+        t = t.strip()
+        if t:
+            toks.add(t)
+    for pc in props.get("parcels", []):
+        t = (pc.get("ParcelID") or "").strip()
+        if t:
+            toks.add(t)
+    return toks
+
+
+def apply_edits(features):
+    """Overlay Google Form submissions onto the matching parks. Last edit wins."""
+    if not EDITS_CSV:
+        return
+    import csv as _csv
+    import io
+    try:
+        req = Request(EDITS_CSV, headers={"User-Agent": UA})
+        with urlopen(req, timeout=30) as r:
+            text = r.read().decode("utf-8")
+    except Exception as e:
+        print(f"  edits sheet not read ({e}); skipping")
+        return
+    rows = list(_csv.DictReader(io.StringIO(text)))
+    applied = 0
+    for row in rows:                                   # top-to-bottom = oldest-to-newest
+        pid = (row.get("Parcel ID") or "").strip()
+        if not pid:
+            continue
+        edit_toks = {t.strip() for t in pid.split("+") if t.strip()}
+        target = None
+        for f in features:
+            props = f["properties"]
+            if (pid == (props.get("ParcelID") or "").strip()
+                    or (edit_toks & _park_id_tokens(props))):
+                target = props
+                break
+        if target is None:
+            continue
+        name = (row.get("Correct / better name") or "").strip()
+        if name:
+            target["park_name"] = name
+            target["name_source"] = "edited"
+        lc = (row.get("Lot count") or "").strip()
+        if lc:
+            try:
+                target["lot_count"] = int(float(lc))
+            except ValueError:
+                pass
+        for col, key in EDIT_MAP.items():
+            v = (row.get(col) or "").strip()
+            if v:
+                target[key] = v
+        target["edited"] = True
+        if (row.get("Timestamp") or "").strip():
+            target["edited_at"] = row["Timestamp"].strip()
+        applied += 1
+    print(f"Applied {applied} edit row(s) from the responses sheet")
+
+
 def build(county, out_geojson, out_csv, do_lots=True, do_names=True, min_lots=0):
     where = park_where(county)
     print(f"Querying parks in {county.upper()} ...")
@@ -589,6 +667,9 @@ def build(county, out_geojson, out_csv, do_lots=True, do_names=True, min_lots=0)
         label = p.get("park_name") or "(unnamed)"
         extra = f"  ({p['parcel_count']} parcels)" if p.get("parcel_count", 1) > 1 else ""
         print(f"  {label[:32]:32}  lots~{p.get('lot_count')}{extra}")
+
+    # Overlay manual edits submitted through the Google Form (name, rents, counts).
+    apply_edits(features)
 
     # Drop very small parks if a threshold was given (we don't chase those).
     if min_lots:
