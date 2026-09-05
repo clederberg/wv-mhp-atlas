@@ -98,6 +98,20 @@ function openDetail(p) {
     ? `<a class="detail-edit" href="${eu}" target="_blank" rel="noopener">Edit / add details</a>`
     : `<button class="detail-edit" onclick="toast('Add your Google Form link in index.html (FORM_URL) to enable editing')">Edit / add details</button>`;
 
+  const fmtRent = (v) => { v = ("" + v).trim(); return /^\d+(\.\d+)?$/.test(v) ? "$" + v : v; };
+  const ed = [];
+  if (p.rent_single) ed.push(_kv("Single-wide rent", fmtRent(p.rent_single)));
+  if (p.rent_double) ed.push(_kv("Double-wide rent", fmtRent(p.rent_double)));
+  if (p.count_park_owned) ed.push(_kv("Park-owned homes", p.count_park_owned));
+  if (p.count_rv) ed.push(_kv("RV sites", p.count_rv));
+  if (p.count_sfh) ed.push(_kv("Single-family homes", p.count_sfh));
+  if (p.count_other) ed.push(_kv("Other", p.count_other));
+  const edSec = (ed.length || p.notes)
+    ? `<div class="detail-sec"><h3>Operating details ${p.edited_at ? `<span class="addr" style="text-transform:none;font-weight:400">\u00b7 edited ${String(p.edited_at).split(" ")[0]}</span>` : ""}</h3>
+        ${ed.length ? `<div class="detail-grid">${ed.join("")}</div>` : ""}
+        ${p.notes ? `<div class="addr" style="margin-top:8px">${p.notes}</div>` : ""}</div>`
+    : "";
+
   ov.innerHTML = `<div class="detail-panel">
     <a class="detail-close" onclick="closeDetail()">&times;</a>
     <h2>${p.park_name || "Unnamed park"}</h2>
@@ -123,6 +137,7 @@ function openDetail(p) {
       ${p.recent_transfer ? `<div class="addr">Transfer pending to ${p.NewOwner || ""}</div>` : ""}
     </div>
     ${parcels ? `<div class="detail-sec"><h3>Parcels in this park</h3>${parcels}</div>` : ""}
+    ${edSec}
     <div class="detail-sec" style="border:none">${editBtn}</div>
   </div>`;
   document.body.appendChild(ov);
