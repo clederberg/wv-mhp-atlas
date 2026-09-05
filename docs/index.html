@@ -57,7 +57,83 @@
 <script src="app.js"></script>
 <script>
 let PARKS = [];
+let SHOWN = [];
 let sortK = "lot_count", sortDir = -1;
+
+// ---- Edit form wiring -----------------------------------------------------
+// After you create your Google Form, paste its "viewform" link into FORM_URL.
+// To pre-fill the park onto the form, use Google's "Get pre-filled link" on the
+// Parcel and Park-name questions, and copy the entry.NNNN numbers here.
+const FORM_URL = "";            // e.g. "https://docs.google.com/forms/d/e/ABC.../viewform"
+const FORM_PARCEL_ENTRY = "";   // the entry number for the "Parcel ID" question
+const FORM_NAME_ENTRY = "";     // the entry number for the "Park name" question
+
+function editUrl(p) {
+  if (!FORM_URL) return "";
+  let u = FORM_URL + (FORM_URL.includes("?") ? "&" : "?") + "usp=pp_url";
+  if (FORM_PARCEL_ENTRY) u += "&entry." + FORM_PARCEL_ENTRY + "=" + encodeURIComponent(p.ParcelID || "");
+  if (FORM_NAME_ENTRY) u += "&entry." + FORM_NAME_ENTRY + "=" + encodeURIComponent(p.park_name || "");
+  return u;
+}
+
+function _kv(k, v) {
+  return `<div class="k">${k}</div><div class="v">${v || "<span class='muted'>&mdash;</span>"}</div>`;
+}
+
+function openDetail(p) {
+  const ov = document.createElement("div");
+  ov.className = "detail-overlay";
+  ov.onclick = (e) => { if (e.target === ov) closeDetail(); };
+
+  const parcels = (p.parcels || []).map(x =>
+    `<div class="detail-parcel"><b>${x.ParcelID || ""}</b> &nbsp; ${num(x.lot_count)} lots &nbsp; ${money(x.TotalAppraisal)}<div class="addr">${x.FullPhysicalAddress || ""}</div></div>`
+  ).join("");
+
+  const deedHtml = deed(p)
+    ? `<a href="https://searchrecords.monongaliacountyclerk.com/" target="_blank" rel="noopener" onclick="copyBook('${(p.DeedBook || '').trim()}')">${deed(p)}</a> <span class="addr">(opens clerk search, copies book #)</span>`
+    : "<span class='muted'>&mdash;</span>";
+
+  const eu = editUrl(p);
+  const editBtn = eu
+    ? `<a class="detail-edit" href="${eu}" target="_blank" rel="noopener">Edit / add details</a>`
+    : `<button class="detail-edit" onclick="toast('Add your Google Form link in index.html (FORM_URL) to enable editing')">Edit / add details</button>`;
+
+  ov.innerHTML = `<div class="detail-panel">
+    <a class="detail-close" onclick="closeDetail()">&times;</a>
+    <h2>${p.park_name || "Unnamed park"}</h2>
+    <div class="detail-owner">${p.FullOwnerName || ""}</div>
+    <div class="detail-grid">
+      ${_kv("Lots (E-911)", num(p.lot_count))}
+      ${_kv("Parcels", p.parcel_count || 1)}
+      ${_kv("Assessed", money(p.TotalAppraisal))}
+      ${_kv("Est. market", money(p.est_market_value))}
+      ${_kv("Acres", p.DeededAcres || "")}
+      ${_kv("Class", p.PropertyClassDescription || "")}
+      ${_kv("Tax year", p.TaxYear || "")}
+      ${_kv("Name source", p.name_source || "")}
+    </div>
+    <div class="detail-sec">
+      <h3>Location</h3>
+      <div>${addressWithZip(p)}</div>
+      <div class="addr">Owner mailing: ${p.FullOwnerAddress || "&mdash;"}</div>
+    </div>
+    <div class="detail-sec">
+      <h3>Last transfer</h3>
+      <div>${deedHtml}</div>
+      ${p.recent_transfer ? `<div class="addr">Transfer pending to ${p.NewOwner || ""}</div>` : ""}
+    </div>
+    ${parcels ? `<div class="detail-sec"><h3>Parcels in this park</h3>${parcels}</div>` : ""}
+    <div class="detail-sec" style="border:none">${editBtn}</div>
+  </div>`;
+  document.body.appendChild(ov);
+  document.body.style.overflow = "hidden";
+}
+
+function closeDetail() {
+  const ov = document.querySelector(".detail-overlay");
+  if (ov) ov.remove();
+  document.body.style.overflow = "";
+}
 
 function copyBook(book) {
   if (!book) return;
@@ -105,10 +181,12 @@ function render() {
     return ((x || 0) - (y || 0)) * sortDir;
   });
 
+  SHOWN = rows;
   const tb = document.getElementById("rows");
   tb.innerHTML = "";
-  for (const p of rows) {
+  rows.forEach((p, i) => {
     const tr = document.createElement("tr");
+    tr.dataset.i = i;
     const status = p.recent_transfer
       ? `<span class="flag">transfer pending</span>`
       : "";
@@ -125,7 +203,7 @@ function render() {
       <td>${status}${p.recent_transfer ? "<div class='addr'>to " + (p.NewOwner || "") + "</div>" : ""}</td>
       <td class="nowrap">${p.parcel_count > 1 ? p.parcel_count + " parcels" : (p.ParcelID || "")}</td>`;
     tb.appendChild(tr);
-  }
+  });
   document.getElementById("count").textContent =
     `${rows.length} park${rows.length === 1 ? "" : "s"}`;
   markArrows();
@@ -148,6 +226,15 @@ document.querySelectorAll("thead th").forEach(th => {
 });
 document.getElementById("q").addEventListener("input", render);
 document.getElementById("zip").addEventListener("change", render);
+
+document.getElementById("rows").addEventListener("click", (e) => {
+  if (e.target.closest("a")) return;        // let the deed link do its thing
+  const tr = e.target.closest("tr");
+  if (!tr || tr.dataset.i === undefined) return;
+  const p = SHOWN[+tr.dataset.i];
+  if (p) openDetail(p);
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDetail(); });
 
 function fillZips() {
   const zips = [...new Set(PARKS.map(zipOf).filter(Boolean))].sort();
