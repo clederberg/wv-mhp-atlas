@@ -228,7 +228,7 @@ function render() {
     tr.innerHTML = `
       <td class="parkname">${p.park_name ? p.park_name : "<span class='muted'>&mdash;</span>"}</td>
       <td class="owner">${p.FullOwnerName || ""}</td>
-      <td>${displayAddress(p)}<div class="addr">${p.FullOwnerAddress || ""}</div></td>
+      <td>${displayAddress(p)}</td>
       <td>${countyOf(p)}</td>
       <td class="num nowrap">${zipOf(p) || "<span class='muted'>&mdash;</span>"}</td>
       <td class="num">${num(p.lot_count)}</td>`;
