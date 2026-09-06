@@ -165,9 +165,10 @@ function zipOf(p) {
 // Full 911 address with the ZIP appended if it isn't already in the string.
 function addressWithZip(p) {
   const a = (p.FullPhysicalAddress || "").trim();
+  if (!a) return (p.SAMSZip || "").toString().trim();
+  if (/\b\d{5}\b/.test(a)) return a;            // already contains a ZIP
   const z = (p.SAMSZip || "").toString().trim();
-  if (!a) return z || "";
-  return z && !a.includes(z) ? `${a} ${z}` : a;
+  return z ? `${a} ${z}` : a;
 }
 
 // A human-entered address composed from the corrected parts, or "".
@@ -183,3 +184,11 @@ function verifiedAddress(p) {
 function displayAddress(p) {
   return verifiedAddress(p) || addressWithZip(p);
 }
+
+function _tc(s) {
+  return (s || "").toString().trim().toLowerCase()
+    .replace(/\b\w/g, c => c.toUpperCase());
+}
+function countyOf(p) { return _tc(p.CountyName || ""); }
+function cityOf(p) { return _tc(p.edit_city || p.SAMSCity || ""); }
+function stateOf(p) { return ((p.edit_state || "WV") + "").toUpperCase().trim(); }

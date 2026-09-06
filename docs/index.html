@@ -27,7 +27,10 @@
   <div id="banner"></div>
 
   <div class="controls">
-    <input type="search" id="q" placeholder="Filter by owner, address, ZIP, or parcel id">
+    <input type="search" id="q" placeholder="Search owner, park name, address, parcel">
+    <select id="state"><option value="">All states</option></select>
+    <select id="county"><option value="">All counties</option></select>
+    <select id="city"><option value="">All towns</option></select>
     <select id="zip"><option value="">All ZIPs</option></select>
     <span class="count" id="count"></span>
   </div>
@@ -39,12 +42,9 @@
           <th data-k="park_name">Park <span class="arrow"></span></th>
           <th data-k="FullOwnerName">Owner <span class="arrow"></span></th>
           <th data-k="FullPhysicalAddress">Park address <span class="arrow"></span></th>
+          <th data-k="county">County <span class="arrow"></span></th>
+          <th class="nowrap" data-k="zip">ZIP <span class="arrow"></span></th>
           <th class="num" data-k="lot_count">Lots <span class="arrow"></span></th>
-          <th class="num" data-k="TotalAppraisal">Assessed <span class="arrow"></span></th>
-          <th class="num" data-k="est_market_value">Est. market <span class="arrow"></span></th>
-          <th class="nowrap" data-k="deed">Last transfer <span class="arrow"></span></th>
-          <th data-k="recent_transfer">Status <span class="arrow"></span></th>
-          <th class="nowrap" data-k="ParcelID">Parcel <span class="arrow"></span></th>
         </tr>
       </thead>
       <tbody id="rows"></tbody>
@@ -99,47 +99,60 @@ function openDetail(p) {
     : `<button class="detail-edit" onclick="toast('Add your Google Form link in index.html (FORM_URL) to enable editing')">Edit / add details</button>`;
 
   const fmtRent = (v) => { v = ("" + v).trim(); return /^\d+(\.\d+)?$/.test(v) ? "$" + v : v; };
-  const ed = [];
-  if (p.rent_single) ed.push(_kv("Single-wide rent", fmtRent(p.rent_single)));
-  if (p.rent_double) ed.push(_kv("Double-wide rent", fmtRent(p.rent_double)));
-  if (p.count_park_owned) ed.push(_kv("Park-owned homes", p.count_park_owned));
-  if (p.count_rv) ed.push(_kv("RV sites", p.count_rv));
-  if (p.count_sfh) ed.push(_kv("Single-family homes", p.count_sfh));
-  if (p.count_other) ed.push(_kv("Other", p.count_other));
-  const edSec = (ed.length || p.notes)
-    ? `<div class="detail-sec"><h3>Operating details ${p.edited_at ? `<span class="addr" style="text-transform:none;font-weight:400">\u00b7 edited ${String(p.edited_at).split(" ")[0]}</span>` : ""}</h3>
-        ${ed.length ? `<div class="detail-grid">${ed.join("")}</div>` : ""}
-        ${p.notes ? `<div class="addr" style="margin-top:8px">${p.notes}</div>` : ""}</div>`
+
+  // Operating details (the numbers that matter most, shown up top)
+  const op = [];
+  op.push(_kv(p.lot_count_verified ? "Lots (verified)" : "Lots (E-911)", num(p.lot_count)));
+  if (p.count_park_owned) op.push(_kv("Park-owned homes", p.count_park_owned));
+  if (p.count_rv) op.push(_kv("RV sites", p.count_rv));
+  if (p.count_sfh) op.push(_kv("Single-family homes", p.count_sfh));
+  if (p.count_other) op.push(_kv("Other", p.count_other));
+  if (p.rent_single) op.push(_kv("Single-wide rent", fmtRent(p.rent_single)));
+  if (p.rent_double) op.push(_kv("Double-wide rent", fmtRent(p.rent_double)));
+  const editedTag = p.edited_at
+    ? `<span class="addr" style="text-transform:none;font-weight:400">\u00b7 edited ${String(p.edited_at).split(" ")[0]}</span>`
     : "";
 
   ov.innerHTML = `<div class="detail-panel">
     <a class="detail-close" onclick="closeDetail()">&times;</a>
     <h2>${p.park_name || "Unnamed park"}</h2>
     <div class="detail-owner">${p.FullOwnerName || ""}</div>
-    <div class="detail-grid">
-      ${_kv(p.lot_count_verified ? "Lots (verified)" : "Lots (E-911)", num(p.lot_count))}
-      ${_kv("Parcels", p.parcel_count || 1)}
-      ${_kv("Assessed", money(p.TotalAppraisal))}
-      ${_kv("Est. market", money(p.est_market_value))}
-      ${_kv("Acres", p.DeededAcres || "")}
-      ${_kv("Class", p.PropertyClassDescription || "")}
-      ${_kv("Tax year", p.TaxYear || "")}
-      ${_kv("Name source", p.name_source || "")}
-    </div>
-    <div class="detail-sec">
-      <h3>Location ${p.address_verified ? '<span class="addr" style="text-transform:none;font-weight:400">\u00b7 verified</span>' : ''}</h3>
-      <div>${displayAddress(p)}</div>
+
+    <div class="detail-sec" style="border:none;padding-top:8px">
+      <h3>Address ${p.address_verified ? '<span class="addr" style="text-transform:none;font-weight:400">\u00b7 verified</span>' : ''}</h3>
+      <div style="font-size:15px">${displayAddress(p)}</div>
       ${p.address_verified ? `<div class="addr">Assessor: ${addressWithZip(p)}</div>` : ''}
-      <div class="addr">Owner mailing: ${p.FullOwnerAddress || "&mdash;"}</div>
     </div>
+
+    <div class="detail-sec">
+      <h3>Operating ${editedTag}</h3>
+      <div class="detail-grid">${op.join("")}</div>
+      ${p.notes ? `<div class="addr" style="margin-top:10px">${p.notes}</div>` : ""}
+    </div>
+
+    <div class="detail-sec" style="border:none">${editBtn}</div>
+
+    <div class="detail-sec">
+      <h3>Assessor record</h3>
+      <div class="detail-grid">
+        ${_kv("Assessed", money(p.TotalAppraisal))}
+        ${_kv("Est. market", money(p.est_market_value))}
+        ${_kv("Acres", p.DeededAcres || "")}
+        ${_kv("Class", p.PropertyClassDescription || "")}
+        ${_kv("Tax year", p.TaxYear || "")}
+        ${_kv("Parcels", p.parcel_count || 1)}
+      </div>
+      <div class="addr" style="margin-top:8px">Owner mailing: ${p.FullOwnerAddress || "&mdash;"}</div>
+      <div class="addr">Name source: ${p.name_source || "&mdash;"}</div>
+    </div>
+
     <div class="detail-sec">
       <h3>Last transfer</h3>
       <div>${deedHtml}</div>
       ${p.recent_transfer ? `<div class="addr">Transfer pending to ${p.NewOwner || ""}</div>` : ""}
     </div>
+
     ${parcels ? `<div class="detail-sec"><h3>Parcels in this park</h3>${parcels}</div>` : ""}
-    ${edSec}
-    <div class="detail-sec" style="border:none">${editBtn}</div>
   </div>`;
   document.body.appendChild(ov);
   document.body.style.overflow = "hidden";
@@ -176,17 +189,25 @@ function toast(msg) {
 
 function rowVal(p, k) {
   if (k === "deed") return deed(p);
+  if (k === "county") return countyOf(p);
+  if (k === "zip") return zipOf(p);
   return p[k];
 }
 
 function render() {
   const q = document.getElementById("q").value.trim().toLowerCase();
-  const zipSel = document.getElementById("zip").value;
+  const fState = document.getElementById("state").value;
+  const fCounty = document.getElementById("county").value;
+  const fCity = document.getElementById("city").value;
+  const fZip = document.getElementById("zip").value;
   let rows = PARKS.filter(p => {
-    if (zipSel && zipOf(p) !== zipSel) return false;
+    if (fState && stateOf(p) !== fState) return false;
+    if (fCounty && countyOf(p) !== fCounty) return false;
+    if (fCity && cityOf(p) !== fCity) return false;
+    if (fZip && zipOf(p) !== fZip) return false;
     if (!q) return true;
     return [p.park_name, p.FullOwnerName, p.FullPhysicalAddress, p.ParcelID, p.FullOwnerAddress,
-            zipOf(p), p.edit_street, p.edit_city, p.edit_state]
+            zipOf(p), cityOf(p), countyOf(p), p.edit_street]
       .some(v => (v || "").toLowerCase().includes(q));
   });
   rows.sort((a, b) => {
@@ -204,21 +225,13 @@ function render() {
   rows.forEach((p, i) => {
     const tr = document.createElement("tr");
     tr.dataset.i = i;
-    const status = p.recent_transfer
-      ? `<span class="flag">transfer pending</span>`
-      : "";
     tr.innerHTML = `
       <td class="parkname">${p.park_name ? p.park_name : "<span class='muted'>&mdash;</span>"}</td>
       <td class="owner">${p.FullOwnerName || ""}</td>
       <td>${displayAddress(p)}<div class="addr">${p.FullOwnerAddress || ""}</div></td>
-      <td class="num">${num(p.lot_count)}</td>
-      <td class="num">${money(p.TotalAppraisal)}</td>
-      <td class="num">${money(p.est_market_value)}</td>
-      <td class="num nowrap">${deed(p)
-        ? `<a href="https://searchrecords.monongaliacountyclerk.com/" target="_blank" rel="noopener" onclick="copyBook('${(p.DeedBook || '').trim()}')" title="Opens the Monongalia County Clerk search and copies the book number (${(p.DeedBook || '').trim()}) to your clipboard. Paste into Book #, then type the page.">${deed(p)}</a>`
-        : "<span class='muted'>&mdash;</span>"}</td>
-      <td>${status}${p.recent_transfer ? "<div class='addr'>to " + (p.NewOwner || "") + "</div>" : ""}</td>
-      <td class="nowrap">${p.parcel_count > 1 ? p.parcel_count + " parcels" : (p.ParcelID || "")}</td>`;
+      <td>${countyOf(p)}</td>
+      <td class="num nowrap">${zipOf(p) || "<span class='muted'>&mdash;</span>"}</td>
+      <td class="num">${num(p.lot_count)}</td>`;
     tb.appendChild(tr);
   });
   document.getElementById("count").textContent =
@@ -237,12 +250,13 @@ document.querySelectorAll("thead th").forEach(th => {
   th.addEventListener("click", () => {
     const k = th.dataset.k;
     if (k === sortK) sortDir *= -1;
-    else { sortK = k; sortDir = (k === "park_name" || k === "FullOwnerName" || k === "FullPhysicalAddress") ? 1 : -1; }
+    else { sortK = k; sortDir = (["park_name", "FullOwnerName", "FullPhysicalAddress", "county", "zip"].includes(k)) ? 1 : -1; }
     render();
   });
 });
 document.getElementById("q").addEventListener("input", render);
-document.getElementById("zip").addEventListener("change", render);
+["state", "county", "city", "zip"].forEach(id =>
+  document.getElementById(id).addEventListener("change", render));
 
 document.getElementById("rows").addEventListener("click", (e) => {
   if (e.target.closest("a")) return;        // let the deed link do its thing
@@ -253,29 +267,35 @@ document.getElementById("rows").addEventListener("click", (e) => {
 });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDetail(); });
 
-function fillZips() {
-  const zips = [...new Set(PARKS.map(zipOf).filter(Boolean))].sort();
-  const sel = document.getElementById("zip");
-  for (const z of zips) {
+function fillSelect(id, values) {
+  const sel = document.getElementById(id);
+  values.filter(Boolean).sort().forEach(v => {
     const o = document.createElement("option");
-    o.value = z; o.textContent = z;
+    o.value = v; o.textContent = v;
     sel.appendChild(o);
-  }
+  });
+}
+
+function fillFilters() {
+  fillSelect("state", [...new Set(PARKS.map(stateOf))]);
+  fillSelect("county", [...new Set(PARKS.map(countyOf))]);
+  fillSelect("city", [...new Set(PARKS.map(cityOf))]);
+  fillSelect("zip", [...new Set(PARKS.map(zipOf))]);
 }
 
 loadParks().then(fc => {
   PARKS = fc.features.map(f => f.properties);
-  fillZips();
+  fillFilters();
   if (fc.meta) document.getElementById("sub").textContent =
     `${fc.meta.county || ""} County  \u00b7  built ${fc.meta.built || ""}`;
   if (isSample(fc)) document.getElementById("banner").innerHTML =
     `<div class="sample-banner">Sample data. Run <code>python fetch.py</code> to replace this with live Monongalia parcels.</div>`;
   document.getElementById("note").textContent =
-    "Parks spanning multiple parcels are combined into one row, with lots, acreage, and values summed. Est. market = assessed / 0.6 (WV assesses at 60% of appraised value). Lots = E-911 address points inside the parcel. Last transfer shows the recorded deed reference; the assessor feed carries no sale date or price (those require a county clerk lookup).";
+    "Click any park for full details. Parks spanning multiple parcels are combined into one row, with lots and values summed. Lots = E-911 address points unless a verified count has been entered. Assessed values, deed/clerk lookup, and parcels are in each park's detail panel.";
   render();
 }).catch(e => {
   document.getElementById("rows").innerHTML =
-    `<tr><td colspan="9">Could not load parks.geojson. ${e.message}</td></tr>`;
+    `<tr><td colspan="6">Could not load parks.geojson. ${e.message}</td></tr>`;
 });
 </script>
 </body>
