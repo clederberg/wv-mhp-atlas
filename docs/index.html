@@ -47,6 +47,7 @@
           <th data-k="park_name">Park <span class="arrow"></span></th>
           <th data-k="FullOwnerName">Owner <span class="arrow"></span></th>
           <th data-k="FullPhysicalAddress">Park address <span class="arrow"></span></th>
+          <th data-k="city">Town <span class="arrow"></span></th>
           <th data-k="county">County <span class="arrow"></span></th>
           <th class="nowrap" data-k="zip">ZIP <span class="arrow"></span></th>
           <th class="num" data-k="lot_count">Lots <span class="arrow"></span></th>
@@ -68,6 +69,7 @@ let sortK = "lot_count", sortDir = -1;
 function rowVal(p, k) {
   if (k === "deed") return deed(p);
   if (k === "county") return countyOf(p);
+  if (k === "city") return cityOf(p);
   if (k === "zip") return zipOf(p);
   return p[k];
 }
@@ -108,6 +110,7 @@ function render() {
       <td class="parkname">${p.park_name ? p.park_name : "<span class='muted'>&mdash;</span>"}</td>
       <td class="owner">${p.FullOwnerName || ""}</td>
       <td>${displayAddress(p)}</td>
+      <td>${cityOf(p)}</td>
       <td>${countyOf(p)}</td>
       <td class="num nowrap">${zipOf(p) || "<span class='muted'>&mdash;</span>"}</td>
       <td class="num">${num(p.lot_count)}</td>`;
@@ -129,7 +132,7 @@ document.querySelectorAll("thead th").forEach(th => {
   th.addEventListener("click", () => {
     const k = th.dataset.k;
     if (k === sortK) sortDir *= -1;
-    else { sortK = k; sortDir = (["park_name", "FullOwnerName", "FullPhysicalAddress", "county", "zip"].includes(k)) ? 1 : -1; }
+    else { sortK = k; sortDir = (["park_name", "FullOwnerName", "FullPhysicalAddress", "city", "county", "zip"].includes(k)) ? 1 : -1; }
     render();
   });
 });
@@ -178,7 +181,7 @@ loadParks().then(fc => {
   render();
 }).catch(e => {
   document.getElementById("rows").innerHTML =
-    `<tr><td colspan="6">Could not load parks.geojson. ${e.message}</td></tr>`;
+    `<tr><td colspan="7">Could not load parks.geojson. ${e.message}</td></tr>`;
 });
 </script>
 </body>
