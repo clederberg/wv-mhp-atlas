@@ -192,3 +192,128 @@ function _tc(s) {
 function countyOf(p) { return _tc(p.CountyName || ""); }
 function cityOf(p) { return _tc(p.edit_city || p.SAMSCity || ""); }
 function stateOf(p) { return ((p.edit_state || "WV") + "").toUpperCase().trim(); }
+
+// --- Shared park detail panel (used by both the table and the map) ---------
+const FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSfHyZgntXrETDo_iQmMaYgLak6pk2fsDjEGSKnbWIMleX-wwQ/viewform";
+const FORM_PARCEL_ENTRY = "1225674373";
+const FORM_NAME_ENTRY = "244410246";
+
+function editUrl(p) {
+  if (!FORM_URL) return "";
+  let u = FORM_URL + (FORM_URL.includes("?") ? "&" : "?") + "usp=pp_url";
+  if (FORM_PARCEL_ENTRY) u += "&entry." + FORM_PARCEL_ENTRY + "=" + encodeURIComponent(p.ParcelID || "");
+  if (FORM_NAME_ENTRY) u += "&entry." + FORM_NAME_ENTRY + "=" + encodeURIComponent(p.park_name || "");
+  return u;
+}
+
+function _kv(k, v) {
+  return `<div class="k">${k}</div><div class="v">${v || "<span class='muted'>&mdash;</span>"}</div>`;
+}
+
+function copyBook(book) {
+  if (!book) return;
+  try { navigator.clipboard.writeText(book); } catch (e) { /* ignore */ }
+  toast(`Book ${book} copied \u2014 paste into Book #`);
+}
+
+function toast(msg) {
+  let t = document.getElementById("atlas-toast");
+  if (!t) {
+    t = document.createElement("div");
+    t.id = "atlas-toast";
+    t.style.cssText = "position:fixed;bottom:18px;left:50%;transform:translateX(-50%);" +
+      "background:#1e4a24;color:#fff;padding:9px 16px;border-radius:8px;font-size:13px;" +
+      "font-family:Lato,sans-serif;z-index:9999;box-shadow:0 4px 14px rgba(0,0,0,.2);" +
+      "opacity:0;transition:opacity .15s";
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.style.opacity = "1";
+  clearTimeout(t._h);
+  t._h = setTimeout(() => { t.style.opacity = "0"; }, 2200);
+}
+
+function openDetail(p) {
+  const ov = document.createElement("div");
+  ov.className = "detail-overlay";
+  ov.onclick = (e) => { if (e.target === ov) closeDetail(); };
+
+  const parcels = (p.parcels || []).map(x =>
+    `<div class="detail-parcel"><b>${x.ParcelID || ""}</b> &nbsp; ${num(x.lot_count)} lots &nbsp; ${money(x.TotalAppraisal)}<div class="addr">${x.FullPhysicalAddress || ""}</div></div>`
+  ).join("");
+
+  const deedHtml = deed(p)
+    ? `<a href="https://searchrecords.monongaliacountyclerk.com/" target="_blank" rel="noopener" onclick="copyBook('${(p.DeedBook || '').trim()}')">${deed(p)}</a> <span class="addr">(opens clerk search, copies book #)</span>`
+    : "<span class='muted'>&mdash;</span>";
+
+  const eu = editUrl(p);
+  const editBtn = eu
+    ? `<a class="detail-edit" href="${eu}" target="_blank" rel="noopener">Edit / add details</a>`
+    : `<button class="detail-edit" onclick="toast('Add your Google Form link in index.html (FORM_URL) to enable editing')">Edit / add details</button>`;
+
+  const fmtRent = (v) => { v = ("" + v).trim(); return /^\d+(\.\d+)?$/.test(v) ? "$" + v : v; };
+
+  const op = [];
+  op.push(_kv(p.lot_count_verified ? "Lots (verified)" : "Lots (E-911)", num(p.lot_count)));
+  if (p.count_park_owned) op.push(_kv("Park-owned homes", p.count_park_owned));
+  if (p.count_rv) op.push(_kv("RV sites", p.count_rv));
+  if (p.count_sfh) op.push(_kv("Single-family homes", p.count_sfh));
+  if (p.count_other) op.push(_kv("Other", p.count_other));
+  if (p.rent_single) op.push(_kv("Single-wide rent", fmtRent(p.rent_single)));
+  if (p.rent_double) op.push(_kv("Double-wide rent", fmtRent(p.rent_double)));
+  const editedTag = p.edited_at
+    ? `<span class="addr" style="text-transform:none;font-weight:400">\u00b7 edited ${String(p.edited_at).split(" ")[0]}</span>`
+    : "";
+
+  ov.innerHTML = `<div class="detail-panel">
+    <a class="detail-close" onclick="closeDetail()">&times;</a>
+    <h2>${p.park_name || "Unnamed park"}</h2>
+    <div class="detail-owner">${p.FullOwnerName || ""}</div>
+
+    <div class="detail-sec" style="border:none;padding-top:8px">
+      <h3>Address ${p.address_verified ? '<span class="addr" style="text-transform:none;font-weight:400">\u00b7 verified</span>' : ''}</h3>
+      <div style="font-size:15px">${displayAddress(p)}</div>
+      ${p.address_verified ? `<div class="addr">Assessor: ${addressWithZip(p)}</div>` : ''}
+    </div>
+
+    <div class="detail-sec">
+      <h3>Operating ${editedTag}</h3>
+      <div class="detail-grid">${op.join("")}</div>
+      ${p.notes ? `<div class="addr" style="margin-top:10px">${p.notes}</div>` : ""}
+    </div>
+
+    <div class="detail-sec" style="border:none">${editBtn}</div>
+
+    <div class="detail-sec">
+      <h3>Assessor record</h3>
+      <div class="detail-grid">
+        ${_kv("Assessed", money(p.TotalAppraisal))}
+        ${_kv("Est. market", money(p.est_market_value))}
+        ${_kv("Acres", p.DeededAcres || "")}
+        ${_kv("Class", p.PropertyClassDescription || "")}
+        ${_kv("Tax year", p.TaxYear || "")}
+        ${_kv("Parcels", p.parcel_count || 1)}
+      </div>
+      <div class="addr" style="margin-top:8px">Owner mailing: ${p.FullOwnerAddress || "&mdash;"}</div>
+      <div class="addr">Name source: ${p.name_source || "&mdash;"}</div>
+    </div>
+
+    <div class="detail-sec">
+      <h3>Last transfer</h3>
+      <div>${deedHtml}</div>
+      ${p.recent_transfer ? `<div class="addr">Transfer pending to ${p.NewOwner || ""}</div>` : ""}
+    </div>
+
+    ${parcels ? `<div class="detail-sec"><h3>Parcels in this park</h3>${parcels}</div>` : ""}
+  </div>`;
+  document.body.appendChild(ov);
+  document.body.style.overflow = "hidden";
+}
+
+function closeDetail() {
+  const ov = document.querySelector(".detail-overlay");
+  if (ov) ov.remove();
+  document.body.style.overflow = "";
+}
+
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDetail(); });

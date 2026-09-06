@@ -40,18 +40,23 @@ L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_L
 
 const BASE = "#1e4a24", FLAG = "#9c2f45";
 
+let MAP_PARKS = [];
+
 function popup(p) {
+  const lots = p.lot_count_verified
+    ? `Lots (verified): ${p.lot_count ?? "?"}`
+    : `Lots (E-911): ${p.lot_count ?? "?"}`;
   return `
-    ${p.park_name ? `<b style="font-size:14.5px">${p.park_name}</b><br>` : ""}
-    <b>${p.FullOwnerName || "Unknown owner"}</b><br>
-    ${addressWithZip(p) || p.edit_street ? displayAddress(p) + "<br>" : ""}
-    <b>${p.lot_count_verified ? "Lots (verified):" : "Lots (E-911):"}</b> ${p.lot_count ?? "?"}${p.parcel_count > 1 ? ` &nbsp;·&nbsp; ${p.parcel_count} parcels` : ""}<br>
-    <b>Assessed:</b> ${money(p.TotalAppraisal)} &nbsp; <b>Est. market:</b> ${money(p.est_market_value)}<br>
-    <b>Parcel:</b> ${p.ParcelID || ""}<br>
-    ${p.recent_transfer ? `<span style="color:${FLAG}"><b>Transfer pending to ${p.NewOwner || "?"}</b></span>` : ""}`;
+    <b style="font-size:14.5px">${p.park_name || "Unnamed park"}</b><br>
+    ${p.FullOwnerName || ""}<br>
+    ${displayAddress(p) ? displayAddress(p) + "<br>" : ""}
+    <b>${lots}</b>${p.parcel_count > 1 ? ` &nbsp;·&nbsp; ${p.parcel_count} parcels` : ""}<br>
+    ${p.recent_transfer ? `<span style="color:${FLAG}"><b>Transfer pending to ${p.NewOwner || "?"}</b></span><br>` : ""}
+    <button onclick="openDetail(MAP_PARKS[${p._i}])" style="margin-top:8px;background:${BASE};color:#fff;border:none;border-radius:7px;padding:7px 13px;font-weight:700;cursor:pointer;font-family:'Lato',sans-serif;font-size:13px">Open full detail</button>`;
 }
 
 loadParks().then(fc => {
+  MAP_PARKS = fc.features.map((f, i) => { f.properties._i = i; return f.properties; });
   if (fc.meta) document.getElementById("sub").textContent =
     `${fc.meta.county || ""} County  \u00b7  built ${fc.meta.built || ""}`;
   if (isSample(fc)) document.getElementById("banner").innerHTML =

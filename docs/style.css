@@ -216,3 +216,16 @@ tbody tr { cursor: pointer; }
   padding: 11px 20px; border-radius: 9px; font-weight: 700; text-decoration: none;
   border: none; cursor: pointer; font-size: 14px; font-family: 'Lato', sans-serif;
 }
+
+/* Filter bar: wide search + compact type-ahead filters + clear button */
+.controls #q { flex: 1; min-width: 240px; }
+.controls input#state, .controls input#county, .controls input#city, .controls input#zip {
+  flex: 0 0 auto; width: 132px; min-width: 0;
+}
+.controls input#zip { width: 96px; }
+.controls #clear {
+  flex: 0 0 auto; padding: 10px 14px; border: 1px solid var(--line);
+  background: var(--panel); color: var(--muted); border-radius: 10px;
+  font: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
+}
+.controls #clear:hover { color: var(--brand); border-color: var(--brand); }
