@@ -447,6 +447,7 @@ def _merge_group(members):
         "FullOwnerName": rep.get("FullOwnerName", ""),
         "FullOwnerAddress": rep.get("FullOwnerAddress", ""),
         "FullPhysicalAddress": rep.get("FullPhysicalAddress", ""),
+        "CountyName": rep.get("CountyName", ""),
         "SAMSCity": rep.get("SAMSCity", ""),
         "SAMSZip": rep.get("SAMSZip", ""),
         "lot_count": sum(_num(m["properties"], "lot_count") for m in members),
@@ -559,8 +560,17 @@ def apply_edits(features):
         return
     rows = list(_csv.DictReader(io.StringIO(text)))
     applied = 0
-    for row in rows:                                   # top-to-bottom = oldest-to-newest
-        pid = (row.get("Parcel ID") or "").strip()
+
+    def norm(h):
+        return re.sub(r"[^a-z0-9]+", " ", (h or "").lower()).strip()
+
+    for raw in rows:                                   # top-to-bottom = oldest-to-newest
+        row = {norm(k): (v or "") for k, v in raw.items()}
+
+        def g(header):
+            return (row.get(norm(header)) or "").strip()
+
+        pid = g("Parcel ID")
         if not pid:
             continue
         edit_toks = {t.strip() for t in pid.split("+") if t.strip()}
@@ -573,11 +583,11 @@ def apply_edits(features):
                 break
         if target is None:
             continue
-        name = (row.get("Correct / better name") or "").strip()
+        name = g("Correct / better name")
         if name:
             target["park_name"] = name
             target["name_source"] = "edited"
-        lc = (row.get("Lot count") or "").strip()
+        lc = g("Lot count")
         if lc:
             try:
                 target["lot_count"] = int(float(lc))
@@ -585,7 +595,7 @@ def apply_edits(features):
             except ValueError:
                 pass
         for col, key in EDIT_MAP.items():
-            v = (row.get(col) or "").strip()
+            v = g(col)
             if v:
                 target[key] = v
         # Corrected address parts (any subset). Mark verified if any provided.
@@ -596,13 +606,13 @@ def apply_edits(features):
             "Correct State": "edit_state",
         }
         for col, key in addr_parts.items():
-            v = (row.get(col) or "").strip()
+            v = g(col)
             if v:
                 target[key] = v
                 target["address_verified"] = True
         target["edited"] = True
-        if (row.get("Timestamp") or "").strip():
-            target["edited_at"] = row["Timestamp"].strip()
+        if g("Timestamp"):
+            target["edited_at"] = g("Timestamp")
         applied += 1
     print(f"Applied {applied} edit row(s) from the responses sheet")
 
