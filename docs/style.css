@@ -229,3 +229,40 @@ tbody tr { cursor: pointer; }
   font: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
 }
 .controls #clear:hover { color: var(--brand); border-color: var(--brand); }
+
+/* ---- Mobile: below 640px only. Desktop is unaffected. ---- */
+@media (max-width: 640px) {
+  .wrap { padding: 20px 14px 56px; }
+  .brand .logo { height: 56px; }
+  .masthead h1 { font-size: 21px; }
+  .brandtext { padding-left: 12px; }
+
+  /* Filter bar stacks: full-width search, filters two-up */
+  .controls { gap: 8px; }
+  .controls #q { flex: 1 1 100%; min-width: 0; }
+  .controls input#state, .controls input#county,
+  .controls input#city, .controls input#zip { flex: 1 1 44%; width: auto; }
+  .controls #clear { flex: 1 1 44%; }
+  .controls .count { flex: 1 1 100%; }
+
+  /* Table becomes stacked cards */
+  .tablewrap { border: none; box-shadow: none; background: transparent; overflow: visible; }
+  table, tbody, tr, td { display: block; width: 100%; }
+  thead { display: none; }
+  tbody tr {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    box-shadow: var(--shadow); margin-bottom: 12px; padding: 14px 16px;
+  }
+  tbody tr:hover { background: var(--panel); }
+  tbody td { border: none; padding: 2px 0; text-align: left; }
+  td.num, th.num { text-align: left; }
+
+  td.parkname { font-size: 18px; margin-bottom: 3px; }
+  td.col-addr { color: var(--muted); font-size: 14px; }
+  td.col-town::before { content: "Town: "; color: var(--muted); }
+  td.col-lots::before { content: "Lots: "; color: var(--muted); }
+  td.col-lots { margin-top: 4px; font-weight: 700; }
+
+  /* Hidden on the card, still shown in the detail panel */
+  td.col-owner, td.col-county, td.col-zip { display: none; }
+}

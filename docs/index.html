@@ -108,12 +108,12 @@ function render() {
     tr.dataset.i = i;
     tr.innerHTML = `
       <td class="parkname">${p.park_name ? p.park_name : "<span class='muted'>&mdash;</span>"}</td>
-      <td class="owner">${p.FullOwnerName || ""}</td>
-      <td>${displayAddress(p)}</td>
-      <td>${cityOf(p)}</td>
-      <td>${countyOf(p)}</td>
-      <td class="num nowrap">${zipOf(p) || "<span class='muted'>&mdash;</span>"}</td>
-      <td class="num">${num(p.lot_count)}</td>`;
+      <td class="owner col-owner">${p.FullOwnerName || ""}</td>
+      <td class="col-addr">${displayAddress(p)}</td>
+      <td class="col-town">${cityOf(p)}</td>
+      <td class="col-county">${countyOf(p)}</td>
+      <td class="num nowrap col-zip">${zipOf(p) || "<span class='muted'>&mdash;</span>"}</td>
+      <td class="num col-lots">${num(p.lot_count)}</td>`;
     tb.appendChild(tr);
   });
   document.getElementById("count").textContent =
